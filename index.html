@@ -53,11 +53,14 @@ svg.dragging{cursor:grabbing}
 #capture input{flex:1;background:transparent;border:0;color:var(--fg);font:13.5px var(--sans);outline:none}
 #capture input::placeholder{color:var(--dim)}
 
-#app.sideHidden #side{display:none !important;width:0 !important;border:0 !important}
-#side{width:352px;border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column}
+#side{width:352px;flex:0 0 auto;overflow:hidden;border-left:1px solid var(--line);background:var(--panel);
+  display:flex;flex-direction:column;
+  transition:width .3s cubic-bezier(.22,.61,.36,1),border-color .3s,opacity .22s}
+#app.sideHidden #side{width:0;border-left-color:transparent;opacity:0}
 #side header{padding:12px 16px;border-bottom:1px solid var(--line);font-size:11.5px;color:var(--muted);
   letter-spacing:.1em;text-transform:uppercase}
-#panel{flex:1;overflow:auto;padding:16px}
+#panel{flex:1;overflow:auto;padding:16px;min-width:320px}
+  #side>header{min-width:320px}
 .row{display:flex;gap:10px;align-items:center;margin-bottom:10px}
 .row label{width:56px;flex:none;font-size:11px;color:var(--dim);letter-spacing:.06em}
 input,select,textarea{width:100%;background:var(--card);border:1px solid var(--line2);color:var(--fg);
@@ -177,7 +180,7 @@ const typeColor=t=>TYPE_COLOR[t]||"#9aa6b8";
 const typeLabel=t=>TYPE_LABEL[t]||t||"其他";
 const RELS=["亲属","同事","同学","好友","资金","同平台","其他"];
 const KEY="guangxiw.v1";
-const APP_VERSION="0.9.2";
+const APP_VERSION="0.9.5";
 let state={nodes:[],edges:[]},selectedId=null,view={x:0,y:0,k:1},drag=null,panning=null;
 const svg=document.getElementById("svg"),gN=document.getElementById("nodes"),
       gE=document.getElementById("edges"),gV=document.getElementById("viewport");
@@ -256,7 +259,7 @@ function toggleSide(){
   const hidden = localStorage.getItem("guangxiw.side") === "0";
   localStorage.setItem("guangxiw.side", hidden ? "1" : "0");
   applySide();
-  fitView();          // 面板宽度变了，自动重新居中
+  setTimeout(fitView, 330);   // 等宽度过渡结束再居中
 }
 document.getElementById("toggleSide").onclick = toggleSide;
 document.addEventListener("keydown", e=>{
@@ -332,10 +335,13 @@ function render(){
     const x=n.x-NW/2,y=n.y-NH/2;
     const av=n.avatar
       ?`<image href="${n.avatar}" x="${x+10}" y="${y+11}" width="36" height="36" clip-path="inset(0 round 9px)"/>`
-      :`<rect x="${x+10}" y="${y+11}" width="36" height="36" rx="12" fill="${color}1a"/>
-        <rect x="${x+10}" y="${y+11}" width="36" height="36" rx="12" fill="none" stroke="${color}33"/>
-        <text x="${x+28}" y="${y+29}" text-anchor="middle" dominant-baseline="middle"
-           font-size="15.5" font-weight="500" fill="${color}" fill-opacity=".92"
+      :`<defs><radialGradient id="av${n.id}" cx="32%" cy="26%" r="78%">
+           <stop offset="0" stop-color="${color}" stop-opacity=".55"/>
+           <stop offset="1" stop-color="${color}" stop-opacity=".22"/>
+         </radialGradient></defs>
+        <circle cx="${x+28}" cy="${y+29}" r="19" fill="url(#av${n.id})" stroke="${color}" stroke-opacity=".35"/>
+        <text x="${x+28}" y="${y+29}" text-anchor="middle" dominant-baseline="central"
+           font-size="16" font-weight="500" fill="#0f1115" fill-opacity=".82"
            font-family="Noto Sans SC, Microsoft YaHei UI, Segoe UI, sans-serif">${esc((n.name||"?").slice(0,1))}</text>`;
     return `<g class="node" data-id="${n.id}" style="cursor:pointer">
       ${hit?`<rect x="${x-3}" y="${y-3}" width="${NW+6}" height="${NH+6}" rx="15" fill="none" stroke="#d0795a" stroke-width="1.4"/>`:""}
