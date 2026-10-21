@@ -1,9 +1,10 @@
-// GuangXIW 桌面启动器
-// 作用：把同目录的 index.html 用浏览器的 app 模式打开成独立窗口（无地址栏、无标签页），
-// 并用独立 profile 目录保存数据，保证 localStorage 稳定可复用。
+// GuangXIW portable launcher (single file)
+// index.html 作为资源内嵌进 exe；运行时释放到 %LOCALAPPDATA%\GuangXIW\app\index.html，
+// 因为路径固定，file:// 源不变，localStorage 里的关系网数据可以一直沿用。
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Windows.Forms;
 
 static class Launcher
@@ -11,22 +12,32 @@ static class Launcher
     [STAThread]
     static void Main()
     {
-        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-        string html = Path.Combine(baseDir, "index.html");
-        if (!File.Exists(html))
+        string root = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "GuangXIW");
+        string appDir = Path.Combine(root, "app");
+        string profile = Path.Combine(root, "profile");
+        Directory.CreateDirectory(appDir);
+        Directory.CreateDirectory(profile);
+
+        string html = Path.Combine(appDir, "index.html");
+        try
         {
-            MessageBox.Show("找不到 index.html，请把 GuangXIW.exe 和 index.html 放在同一目录。",
-                "GuangXIW", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            var asm = Assembly.GetExecutingAssembly();
+            using (Stream s = asm.GetManifestResourceStream("index.html"))
+            {
+                if (s == null) throw new Exception("内嵌资源缺失");
+                using (var fs = new FileStream(html, FileMode.Create, FileAccess.Write))
+                    s.CopyTo(fs);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("释放应用失败：" + ex.Message, "GuangXIW");
             return;
         }
 
-        string profile = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "GuangXIW", "profile");
-        Directory.CreateDirectory(profile);
-
-        string url = new Uri(html).AbsoluteUri;   // 自动处理中文路径与空格
-
+        string url = new Uri(html).AbsoluteUri;
         string[] candidates = new string[]
         {
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
@@ -46,19 +57,14 @@ static class Launcher
             {
                 var psi = new ProcessStartInfo(exe);
                 psi.Arguments = "--app=\"" + url + "\" --user-data-dir=\"" + profile +
-                                "\" --window-size=1360,900 --disable-features=Translate";
+                                "\" --window-size=1360,900 --disable-features=Translate,msEdgeIdentityIntegration";
                 psi.UseShellExecute = false;
                 Process.Start(psi);
                 return;
             }
             catch { }
         }
-
-        // 兜底：交给系统默认浏览器
         try { Process.Start(new ProcessStartInfo(html) { UseShellExecute = true }); }
-        catch (Exception ex)
-        {
-            MessageBox.Show("启动失败：" + ex.Message, "GuangXIW");
-        }
+        catch (Exception ex) { MessageBox.Show("启动失败：" + ex.Message, "GuangXIW"); }
     }
 }
