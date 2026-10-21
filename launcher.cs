@@ -72,7 +72,7 @@ static class AppHost
 
         var form = new Form
         {
-            Text = "GuangXIW · 关系网",
+            Text = "GuangXIW",
             Width = 1360,
             Height = 900,
             StartPosition = FormStartPosition.CenterScreen,
@@ -81,6 +81,8 @@ static class AppHost
         };
 
         var web = new Microsoft.Web.WebView2.WinForms.WebView2 { Dock = DockStyle.Fill };
+        // 关键：WebView2 默认白底，窗口失焦/重绘时会闪白，必须显式设成应用底色
+        web.DefaultBackgroundColor = System.Drawing.Color.FromArgb(15, 17, 21);
         form.Controls.Add(web);
 
         form.Load += async delegate
