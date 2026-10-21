@@ -121,11 +121,13 @@ textarea{resize:vertical;min-height:66px}
       <select id="caseSel" style="width:150px"></select>
       <button class="btn" id="caseAdd">+ 文件夹</button>
       <input id="search" placeholder="搜索人名 / 标签">
+      <div class="rightGroup">
       <button class="btn primary" id="addNode">+ 新增人物</button>
       <button class="btn" id="exportBtn">导出</button>
       <button class="btn" id="importBtn">导入</button>
       <button class="btn ghost" id="fitBtn">归位</button>
-      <button class="btn ghost" id="toggleSide" title="收起/展开右侧面板">收起面板</button>
+      <button class="btn ghost" id="toggleSide" title="收起/展开右侧面板(Ctrl+B)">收起面板</button>
+      </div>
     </div>
     <div id="capture">
       <input id="capInput" placeholder="速记：选中某人就补进备注，没选就新建一条（回车）">
@@ -254,7 +256,7 @@ function toggleSide(){
   const hidden = localStorage.getItem("guangxiw.side") === "0";
   localStorage.setItem("guangxiw.side", hidden ? "1" : "0");
   applySide();
-  render();          // 面板宽度变了，重排画布
+  fitView();          // 面板宽度变了，自动重新居中
 }
 document.getElementById("toggleSide").onclick = toggleSide;
 document.addEventListener("keydown", e=>{
@@ -330,9 +332,11 @@ function render(){
     const x=n.x-NW/2,y=n.y-NH/2;
     const av=n.avatar
       ?`<image href="${n.avatar}" x="${x+10}" y="${y+11}" width="36" height="36" clip-path="inset(0 round 9px)"/>`
-      :`<rect x="${x+10}" y="${y+11}" width="36" height="36" rx="9" fill="${color}1f" stroke="${color}55"/>
-        <text x="${x+28}" y="${y+37}" text-anchor="middle" font-size="15"
-           font-family="Microsoft YaHei UI, Microsoft YaHei, Segoe UI, sans-serif" fill="${color}">${esc((n.name||"?").slice(0,1))}</text>`;
+      :`<rect x="${x+10}" y="${y+11}" width="36" height="36" rx="12" fill="${color}1a"/>
+        <rect x="${x+10}" y="${y+11}" width="36" height="36" rx="12" fill="none" stroke="${color}33"/>
+        <text x="${x+28}" y="${y+29}" text-anchor="middle" dominant-baseline="middle"
+           font-size="15.5" font-weight="500" fill="${color}" fill-opacity=".92"
+           font-family="Noto Sans SC, Microsoft YaHei UI, Segoe UI, sans-serif">${esc((n.name||"?").slice(0,1))}</text>`;
     return `<g class="node" data-id="${n.id}" style="cursor:pointer">
       ${hit?`<rect x="${x-3}" y="${y-3}" width="${NW+6}" height="${NH+6}" rx="15" fill="none" stroke="#d0795a" stroke-width="1.4"/>`:""}
       <rect x="${x}" y="${y}" width="${NW}" height="${NH}" rx="13" fill="${sel?"#1e232b":"#171b22"}"
@@ -574,7 +578,29 @@ svg.addEventListener("wheel",ev=>{ev.preventDefault();
 document.getElementById("addNode").onclick=()=>uiPrompt("新增人物","输入名字，回车加入。","名字","",name=>{
   if(!name)return;const n=mkNode(name.trim());state.nodes.push(n);selectedId=n.id;
   layout(90);save();render();toast("已添加 "+name);});
-document.getElementById("fitBtn").onclick=()=>{view={x:0,y:0,k:1};layout(180);render();};
+/* 归位：重排 + 按内容包围盒自动缩放居中，一次到位 */
+function fitView(){
+  layout(200);
+  const N=state.nodes;
+  if(!N.length){ view={x:0,y:0,k:1}; render(); return; }
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  N.forEach(n=>{
+    minX=Math.min(minX,n.x-NW/2); maxX=Math.max(maxX,n.x+NW/2);
+    minY=Math.min(minY,n.y-NH/2); maxY=Math.max(maxY,n.y+NH/2);
+  });
+  const W=svg.clientWidth||900, H=svg.clientHeight||620, pad=110;
+  const bw=Math.max(220,(maxX-minX)+pad*2), bh=Math.max(160,(maxY-minY)+pad*2);
+  const k=Math.min(1.5, Math.max(0.32, Math.min(W/bw, H/bh)));
+  const cx=(minX+maxX)/2, cy=(minY+maxY)/2;
+  view.k=k; view.x=-cx*k; view.y=-cy*k;      // 世界中心对准画布中心
+  render();
+}
+document.getElementById("fitBtn").onclick=()=>{
+  const vp=document.getElementById("viewport");
+  vp.style.transition="transform .26s cubic-bezier(.22,.61,.36,1)";
+  fitView();
+  setTimeout(()=>{ vp.style.transition=""; },320);
+};
 document.getElementById("search").oninput=render;
 document.getElementById("exportBtn").onclick=()=>{
   const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
@@ -639,7 +665,8 @@ document.getElementById("capBtn").onclick=quickCapture;
 document.getElementById("capInput").addEventListener("keydown",e=>{if(e.key==="Enter")quickCapture();});
 
 load();layout(220);render();applySide();
-window.addEventListener("resize",()=>render());
+let rzT=null;
+window.addEventListener("resize",()=>{ clearTimeout(rzT); rzT=setTimeout(fitView,180); });
 </script>
 </body>
 </html>
