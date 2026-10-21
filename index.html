@@ -7,18 +7,21 @@
 <style>
 :root{
   --bg:#0f1115; --panel:#14171d; --card:#171b22; --card2:#1c2129;
-  --line:#252b34; --line2:#333b47; --fg:#d2cfc9; --muted:#8b9099; --dim:#72767f;
+  --line:#2a303a; --line2:#3a4350; --fg:#cfccc7; --muted:#8e939c; --dim:#767a83;
   --brass:#c8a96a; --brass2:#8d7748; --rust:#d0795a; --steel:#8aa2bd;
-  --sans:"Microsoft YaHei UI","Microsoft YaHei","Segoe UI","Noto Sans SC",system-ui,sans-serif;
-  --titlefont:"Microsoft YaHei UI","Microsoft YaHei","Segoe UI",system-ui,sans-serif;
+  --sans:"Noto Sans SC","Microsoft YaHei UI","Microsoft YaHei","Segoe UI",system-ui,sans-serif;
+  --titlefont:"Noto Sans SC","Microsoft YaHei UI","Microsoft YaHei","Segoe UI",system-ui,sans-serif;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   /* 画布上不要出现文本选择光标：拖拽=移动节点/平移画布 */
   html,body,#canvasWrap,svg,#topbar,#side,.brand{user-select:none;-webkit-user-select:none}
   input,textarea,select{user-select:text;-webkit-user-select:text;cursor:text}
 html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);
-  font:15px/1.78 var(--sans);font-weight:400;letter-spacing:0;
+  font:15.5px/1.8 var(--sans);font-weight:500;letter-spacing:.004em;
   text-rendering:auto;-webkit-font-smoothing:auto}
+  /* 极轻微的光晕：让笔画边缘不那么"利"，小字号下明显更柔和 */
+  html,body,#topbar,#side,.card,.btn,input,select,textarea{
+    text-shadow:0 0 .45px rgba(255,255,255,.18)}
 #app{display:flex;height:100%}
 #canvasWrap{position:relative;flex:1;overflow:hidden;
   background:radial-gradient(1100px 640px at 32% -8%,#161b23 0%,var(--bg) 62%)}
@@ -34,7 +37,7 @@ svg.dragging{cursor:grabbing}
   line-height:1;color:var(--fg)}
 .brand i{font-style:normal;color:var(--brass)}
 #search{flex:1;max-width:250px;background:var(--card);border:1px solid var(--line2);color:var(--fg);
-  border-radius:8px;padding:8px 12px;font:13px var(--sans);outline:none;transition:.18s}
+  border-radius:10px;padding:9px 12px;font:13px var(--sans);outline:none;transition:.18s}
 #search:focus{border-color:var(--brass2);background:var(--card2)}
 .btn{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--line2);
   color:var(--fg);border-radius:8px;padding:8px 13px;font:13px var(--sans);cursor:pointer;
@@ -64,7 +67,7 @@ textarea{resize:vertical;min-height:66px}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 12px}
 .chip{border:1px solid var(--line2);border-radius:999px;padding:4px 11px;font-size:12px;color:var(--muted);cursor:pointer;transition:.16s}
 .chip.on{border-color:var(--brass);color:var(--brass);background:rgba(200,169,106,.12)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:13px 14px;margin-bottom:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 15px;margin-bottom:12px}
 .card h4{margin:0 0 11px;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.13em;
   display:flex;justify-content:space-between}
 .kv{font-size:12px;color:var(--dim);line-height:1.9}
@@ -427,16 +430,42 @@ function renderPanel(){
     state.nodes=state.nodes.filter(n=>n.id!==node.id);
     state.edges=state.edges.filter(e=>e.from!==node.id&&e.to!==node.id);
     selectedId=null;save();render();toast("已删除");});
-  side.querySelector("#addRel").onclick=()=>{
-    const name=side.querySelector("#eTo").value.trim();if(!name){toast("先填对方名字");return;}
-    const type=side.querySelector("#eType").value,ev=side.querySelector("#eEvid").value.trim(),
+  let relBusy=false;
+  const doAddRel=()=>{
+    if(relBusy) return;                       // 防连点：一次只处理一次
+    relBusy=true; setTimeout(()=>{relBusy=false;},600);
+
+    const raw=side.querySelector("#eTo").value||"";
+    const name=raw.trim().replace(/\s+/g," ");
+    if(!name){toast("先填对方名字");return;}
+    if(name===node.name){toast("不能和自己建立关系");return;}
+
+    const type=side.querySelector("#eType").value,
+          ev=side.querySelector("#eEvid").value.trim(),
           note=side.querySelector("#eNote").value.trim();
-    let other=state.nodes.find(n=>n.name===name);
-    if(!other){other=mkNode(name);state.nodes.push(other);}
-    const dup=state.edges.find(e=>(e.from===node.id&&e.to===other.id)||(e.from===other.id&&e.to===node.id));
-    if(dup){dup.strength=strength;if(ev)dup.evidence=ev;if(note)dup.note=note;toast("关系已更新");}
-    else{state.edges.push(mkEdge(node.id,other.id,type,strength,note,ev));toast("已建立关系");}
-    save();layout(120);render();};
+
+    // 判重：先按名字（忽略空格/大小写），再按 id，避免同名重复建点
+    let other=state.nodes.find(n=>n.id!==node.id && n.name.trim().replace(/\s+/g," ").toLowerCase()===name.toLowerCase());
+    if(!other){ other=mkNode(name); state.nodes.push(other); }
+
+    const dup=state.edges.find(e=>
+      (e.from===node.id&&e.to===other.id)||(e.from===other.id&&e.to===node.id));
+    if(dup){
+      dup.strength=strength; if(type)dup.type=type; if(ev)dup.evidence=ev; if(note)dup.note=note;
+      toast("关系已更新");
+    }else{
+      state.edges.push(mkEdge(node.id,other.id,type,strength,note,ev));
+      toast("已建立关系");
+    }
+    save(); layout(120); render();   // render 会重建面板，relBusy 也随之失效
+  };
+  const relBtn=side.querySelector("#addRel");
+  relBtn.onclick=doAddRel;
+  // 回车提交也只走同一条路径，不会一次冒出好几条
+  ["eTo","eEvid","eNote"].forEach(id=>{
+    const el=side.querySelector("#"+id);
+    if(el) el.addEventListener("keydown",ev=>{ if(ev.key==="Enter"){ ev.preventDefault(); doAddRel(); } });
+  });
   side.querySelectorAll("[data-rel]").forEach(el=>el.onclick=()=>{
     const e=state.edges.find(x=>x.id===el.dataset.rel);if(!e)return;
     uiConfirm("删除这条关系？",`${e.type}｜强度 ${e.strength}`,()=>{
