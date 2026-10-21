@@ -19,9 +19,16 @@ static class Launcher
         }
     }
 
+    private static System.Threading.Mutex singleInstance;
+
     [STAThread]
     static void Main()
     {
+        // 单实例：已经开着一个就直接退出（不弹窗、不提示）
+        bool created;
+        singleInstance = new System.Threading.Mutex(true, "Global\\GuangXIW.SingleInstance", out created);
+        if (!created) return;
+
         string appDir = Path.Combine(Root, "app");
         Directory.CreateDirectory(appDir);
         AppDomain.CurrentDomain.AssemblyResolve += ResolveEmbedded;
@@ -33,6 +40,7 @@ static class Launcher
         string html = Extract("index.html", appDir);
 
         AppHost.Run(html, Path.Combine(appDir, "app.ico"));
+        GC.KeepAlive(singleInstance);
     }
 
     static Assembly ResolveEmbedded(object sender, ResolveEventArgs args)

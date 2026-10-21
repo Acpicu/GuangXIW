@@ -27,6 +27,7 @@ svg.dragging{cursor:grabbing}
 #topbar{position:absolute;left:0;right:0;top:0;display:flex;gap:10px;align-items:center;
   padding:13px 16px;border-bottom:1px solid var(--line);
   background:linear-gradient(180deg,rgba(15,17,21,.96),rgba(15,17,21,.7))}
+#appIcon{flex:0 0 22px;width:22px;height:22px;border-radius:6px;display:block}
 .brand{font-family:var(--serif);font-size:17px;font-weight:600;letter-spacing:.01em}
 .brand i{font-style:normal;color:var(--brass)}
 #search{flex:1;max-width:250px;background:var(--card);border:1px solid var(--line2);color:var(--fg);
@@ -91,6 +92,22 @@ textarea{resize:vertical;min-height:66px}
   <div id="canvasWrap">
     <svg id="svg"><g id="viewport"><g id="edges"></g><g id="nodes"></g></g></svg>
     <div id="topbar">
+      <svg id="appIcon" width="22" height="22" viewBox="0 0 256 256" aria-hidden="true">
+        <defs>
+          <linearGradient id="icGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#3f63e0"/><stop offset="1" stop-color="#9a6bff"/>
+          </linearGradient>
+        </defs>
+        <rect x="0" y="0" width="256" height="256" rx="56" fill="url(#icGrad)"/>
+        <g stroke="#ffffff" stroke-width="10" stroke-opacity=".92">
+          <line x1="88" y1="88" x2="170" y2="120"/>
+          <line x1="88" y1="88" x2="110" y2="178"/>
+          <line x1="170" y1="120" x2="110" y2="178"/>
+        </g>
+        <g fill="#ffffff">
+          <circle cx="88" cy="88" r="17"/><circle cx="170" cy="120" r="17"/><circle cx="110" cy="178" r="17"/>
+        </g>
+      </svg>
       <div class="brand">Guang<i>XIW</i></div>
       <select id="caseSel" style="width:150px"></select>
       <button class="btn" id="caseAdd">+ 文件夹</button>
@@ -469,6 +486,7 @@ svg.addEventListener("pointerdown",ev=>{
   const el=ev.target.closest(".node");
   if(el){const n=state.nodes.find(x=>x.id===el.dataset.id),p=toWorld(ev.clientX,ev.clientY);
     drag={id:n.id,dx:p.x-n.x,dy:p.y-n.y};selectedId=n.id;render();svg.setPointerCapture(ev.pointerId);return;}
+  if(selectedId){ selectedId=null; render(); }   // 点空白 = 取消选中
   panning={sx:ev.clientX,sy:ev.clientY,vx:view.x,vy:view.y};svg.classList.add("dragging");
   svg.setPointerCapture(ev.pointerId);});
 svg.addEventListener("pointermove",ev=>{
