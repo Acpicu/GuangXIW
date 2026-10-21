@@ -81,3 +81,16 @@ GuangXIW/
 - 零第三方依赖，纯原生 JS + SVG，不引入构建工具
 - 所有数据留在本机，不上传；导出文件由用户自己保管
 - 文件名与界面文案用中文，代码注释也中文（便于以后自己改）
+## 七、桌面版与数据位置
+
+| 文件 | 作用 |
+|---|---|
+| `GuangXIW.exe` | 双击即开，独立窗口（无地址栏 / 无标签页），5 KB 启动器 |
+| `index.html` | 应用本体，必须与 exe 放同一目录 |
+| `启动 GuangXIW.bat` | 备用入口，等价于双击 exe |
+
+- 数据存放：`%LOCALAPPDATA%\GuangXIW\profile`（浏览器 profile 里的 localStorage），
+  换机时用应用内「导出 JSON」带走，别直接拷这个目录。
+- 为什么是"启动器 + 浏览器引擎"：Windows 自带的 WebView2 缺 SDK、Electron/Tauri 需要
+  额外几百 MB 工具链。当前方案零依赖、离线可用。若以后要真正自包含单文件，
+  走 Tauri（Rust + WebView2）打包，届时界面代码不用改。
