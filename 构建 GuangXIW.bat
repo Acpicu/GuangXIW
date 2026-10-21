@@ -11,6 +11,7 @@ if not exist "%CSC%" ( echo [ERROR] csc.exe not found & pause & exit /b 1 )
  /resource:index.html ^
  /resource:Microsoft.Web.WebView2.Core.dll ^
  /resource:Microsoft.Web.WebView2.WinForms.dll ^
+ /resource:icon.ico,app.ico ^
  /resource:WebView2Loader.dll ^
  /reference:System.Windows.Forms.dll /reference:System.Drawing.dll ^
  /reference:Microsoft.Web.WebView2.Core.dll /reference:Microsoft.Web.WebView2.WinForms.dll ^

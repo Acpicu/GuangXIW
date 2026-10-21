@@ -93,7 +93,7 @@ textarea{resize:vertical;min-height:66px}
     <div id="topbar">
       <div class="brand">Guang<i>XIW</i></div>
       <select id="caseSel" style="width:150px"></select>
-      <button class="btn" id="caseAdd">+ 案例</button>
+      <button class="btn" id="caseAdd">+ 文件夹</button>
       <input id="search" placeholder="搜索人名 / 标签">
       <button class="btn primary" id="addNode">+ 新增人物</button>
       <button class="btn" id="exportBtn">导出</button>
@@ -144,6 +144,8 @@ textarea{resize:vertical;min-height:66px}
 const TYPES=[["person","人物"],["org","组织"],["place","地点"],["account","账号"],["other","其他"]];
 const TYPE_LABEL=Object.fromEntries(TYPES);
 const TYPE_COLOR={person:"#c8a96a",org:"#8aa2bd",place:"#c9a06a",account:"#8fa3b8",other:"#8d919b"};
+const typeColor=t=>TYPE_COLOR[t]||"#9aa6b8";
+const typeLabel=t=>TYPE_LABEL[t]||t||"其他";
 const RELS=["亲属","同事","同学","好友","资金","同平台","其他"];
 const KEY="guangxiw.v1";
 let state={nodes:[],edges:[]},selectedId=null,view={x:0,y:0,k:1},drag=null,panning=null;
@@ -187,28 +189,28 @@ function load(){
   sel.onchange=()=>{ curId=sel.value; syncState(); selectedId=null; layout(200); save(); render(); };
 }
 function addCase(){
-  uiPrompt("新建案例","一个案例装一个调查目标（如某公司 / 某医院）。","案例名","",name=>{
+  uiPrompt("新建文件夹","一个文件夹装一个调查目标（某公司 / 某医院）。","文件夹名","",name=>{
     if(!name) return;
     const c=blankCase(name.trim()); cases.push(c); curId=c.id; syncState();
     const sel=document.getElementById("caseSel");
     sel.innerHTML=cases.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join("");
-    sel.value=curId; selectedId=null; layout(200); save(); render(); toast("已新建案例 "+name);
+    sel.value=curId; selectedId=null; layout(200); save(); render(); toast("已新建文件夹 "+name);
   });
 }
 function renameCase(){
   const c=currentCase();
-  uiPrompt("重命名案例","",  "案例名", c.name, name=>{
+  uiPrompt("重命名文件夹","",  "文件夹名", c.name, name=>{
     if(!name) return; c.name=name.trim(); save(); load(); render(); toast("已重命名");
   });
 }
 function deleteCase(){
   const c=currentCase();
-  if(cases.length<=1) return toast("至少保留一个案例");
-  uiConfirm("删除案例？",`「${c.name}」里 ${c.nodes.length} 个节点会一起删除，无法撤销。`,()=>{
+  if(cases.length<=1) return toast("至少保留一个文件夹");
+  uiConfirm("删除文件夹？",`「${c.name}」里 ${c.nodes.length} 个节点会一起删除，无法撤销。`,()=>{
     cases=cases.filter(x=>x.id!==c.id); curId=cases[0].id; syncState();
     const sel=document.getElementById("caseSel");
     sel.innerHTML=cases.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join("");
-    sel.value=curId; selectedId=null; layout(200); save(); render(); toast("已删除案例");
+    sel.value=curId; selectedId=null; layout(200); save(); render(); toast("已删除文件夹");
   });
 }
 document.getElementById("caseAdd").onclick=addCase;
@@ -290,7 +292,7 @@ function render(){
         stroke="${sel?color:"#2c333d"}" stroke-width="${sel?1.8:1}"/>
       ${av}
       <text x="${x+56}" y="${y+27}" font-size="13" fill="#e9e7e2">${esc(n.name.slice(0,7))}</text>
-      <text x="${x+56}" y="${y+44}" font-size="10" fill="#8d919b">${TYPE_LABEL[n.type]||"其他"}${deg[n.id]?" · "+deg[n.id]:""}</text>
+      <text x="${x+56}" y="${y+44}" font-size="10" fill="#8d919b">${typeLabel(n.type)}${deg[n.id]?" · "+deg[n.id]:""}</text>
     </g>`;}).join("");
   applyView();
   renderPanel();
@@ -308,12 +310,12 @@ function renderPanel(){
       <div class="card"><h4>关键人物<span class="kv">按连接数</span></h4>
         ${top.length?top.map(n=>`<div class="list-item" data-jump="${n.id}"><span>${esc(n.name)}</span><span class="deg">${deg[n.id]||0}</span></div>`).join(""):`<div class="empty">还没有节点。</div>`}
       </div>
-      <div class="card"><h4>当前案例<span class="kv">${esc(currentCase().name)}</span></h4>
+      <div class="card"><h4>当前文件夹<span class="kv">${esc(currentCase().name)}</span></h4>
         <div class="kv">节点 ${state.nodes.length} · 关系 ${state.edges.length}</div>
         <div class="sep"></div>
         <div style="display:flex;gap:8px">
           <button class="btn" id="caseRename" style="flex:1">重命名</button>
-          <button class="btn danger" id="caseDel" style="flex:1">删除案例</button>
+          <button class="btn danger" id="caseDel" style="flex:1">删除文件夹</button>
         </div>
         <div class="sep"></div>
         <div class="sep"></div>
@@ -339,7 +341,11 @@ function renderPanel(){
       ${node.avatar?`<button class="btn ghost" id="clearAvatar">移除</button>`:""}
     </div>
     <div class="row"><label>名字</label><input id="nName" value="${esc(node.name)}"></div>
-    <div class="row"><label>类型</label><select id="nType">${TYPES.map(([v,l])=>`<option value="${v}" ${node.type===v?"selected":""}>${l}</option>`).join("")}</select></div>
+    <div class="row"><label>类型</label>
+      <input id="nTypeText" list="typeList" value="${esc(TYPE_LABEL[node.type]||node.type||"人物")}"
+             placeholder="人物 / 组织 / 地点…可自己写">
+      <datalist id="typeList">${TYPES.map(([v,l])=>`<option value="${l}">`).join("")}</datalist>
+    </div>
     <div class="row"><label>标签</label><input id="nTags" value="${esc((node.tags||[]).join(","))}" placeholder="逗号分隔"></div>
     <div class="row" style="align-items:flex-start"><label>备注</label><textarea id="nNote">${esc(node.note||"")}</textarea></div>
     <div class="row"><button class="btn primary" id="saveNode" style="flex:1">保存</button><button class="btn danger" id="delNode">删除</button></div>
@@ -362,7 +368,9 @@ function renderPanel(){
   const ca=side.querySelector("#clearAvatar");if(ca)ca.onclick=()=>{node.avatar="";save();render();};
   side.querySelector("#saveNode").onclick=()=>{
     node.name=side.querySelector("#nName").value.trim()||node.name;
-    node.type=side.querySelector("#nType").value;
+    const typeText=side.querySelector("#nTypeText").value.trim()||"其他";
+    const known=TYPES.find(([v,l])=>l===typeText);
+    node.type = known ? known[0] : typeText;
     node.tags=side.querySelector("#nTags").value.split(",").map(s=>s.trim()).filter(Boolean);
     node.note=side.querySelector("#nNote").value;save();render();toast("已保存");};
   side.querySelector("#delNode").onclick=()=>uiConfirm("删除这个节点？","相连的关系会一起删除，无法撤销。",()=>{
@@ -503,19 +511,19 @@ fileInput.onchange=()=>{const f=fileInput.files[0];if(!f)return;
 function importOwn(d){
   if(!d||!Array.isArray(d.nodes)&&!Array.isArray(d.cases))return toast("不是 GuangXIW 导出文件");
   if(Array.isArray(d.cases)){ // 整包导入：全部并入案例列表
-    uiConfirm("导入全部案例？",`将新增 ${d.cases.length} 个案例，与现有案例并存。`,()=>{
+    uiConfirm("导入全部案例？",`将新增 ${d.cases.length} 个文件夹，与现有文件夹并存。`,()=>{
       d.cases.forEach(c=>{ c.id=uid("c"); cases.push(c); });
-      save(); load(); render(); toast("已导入 "+d.cases.length+" 个案例");
+      save(); load(); render(); toast("已导入文件夹");
     });
     return;
   }
-  uiConfirm("并入当前案例？",`把 ${d.nodes.length} 个节点 / ${(d.edges||[]).length} 条关系并进「${currentCase().name}」。`,()=>{
+  uiConfirm("并入当前文件夹？",`把 ${d.nodes.length} 个节点 / ${(d.edges||[]).length} 条关系并进「${currentCase().name}」。`,()=>{
     const c=currentCase();
     const map={};
     d.nodes.forEach(n=>{ const copy=Object.assign({},n); copy.id=uid("n"); map[n.id]=copy.id; c.nodes.push(copy); });
     (d.edges||[]).forEach(e=>{ if(map[e.from]&&map[e.to]){
       const copy=Object.assign({},e); copy.id=uid("e"); copy.from=map[e.from]; copy.to=map[e.to]; c.edges.push(copy); } });
-    syncState(); selectedId=null; save(); layout(170); render(); toast("已并入当前案例");
+    syncState(); selectedId=null; save(); layout(170); render(); toast("已并入当前文件夹");
   });
 }
 
