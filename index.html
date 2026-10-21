@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>GuangXIW · 关系网</title>
+<style>
+  :root{
+    --bg:#0d1117;--panel:#141a21;--card:#1b232b;--line:#27313b;
+    --fg:#e6edf3;--muted:#96a4b2;--primary:#67d6f5;--secondary:#b0bcf5;--warn:#e8c885;--danger:#f08a8a;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);
+    font:15px/1.5 -apple-system,"Segoe UI",Roboto,"Noto Sans SC",sans-serif;overflow:hidden}
+  #app{display:flex;height:100%}
+  /* 画布 */
+  #canvasWrap{position:relative;flex:1;overflow:hidden}
+  svg{display:block;width:100%;height:100%;cursor:grab}
+  svg.dragging{cursor:grabbing}
+  #topbar{position:absolute;left:0;right:0;top:0;display:flex;gap:8px;align-items:center;
+    padding:10px 12px;background:linear-gradient(180deg,rgba(13,17,23,.95),rgba(13,17,23,0))}
+  #topbar .brand{font-weight:700;letter-spacing:3px;font-size:15px}
+  #topbar .brand b{color:var(--primary)}
+  .btn{background:var(--card);border:1px solid var(--line);color:var(--fg);border-radius:10px;
+    padding:7px 12px;font-size:13px;cursor:pointer}
+  .btn:hover{border-color:var(--primary);color:var(--primary)}
+  .btn.primary{background:var(--primary);color:#06222b;border-color:var(--primary);font-weight:600}
+  .btn.danger{color:var(--danger)}
+  #search{flex:1;max-width:240px;background:var(--card);border:1px solid var(--line);
+    color:var(--fg);border-radius:10px;padding:7px 10px;font-size:13px;outline:none}
+  #hint{position:absolute;left:12px;bottom:10px;font-size:12px;color:var(--muted)}
+  /* 侧栏 */
+  #side{width:320px;border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column}
+  #side header{padding:12px;border-bottom:1px solid var(--line);font-size:13px;color:var(--muted)}
+  #panel{flex:1;overflow:auto;padding:12px}
+  .row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+  .row label{width:64px;font-size:12px;color:var(--muted);flex:none}
+  input,select,textarea{width:100%;background:var(--card);border:1px solid var(--line);color:var(--fg);
+    border-radius:9px;padding:8px 10px;font-size:13px;font-family:inherit;outline:none}
+  textarea{resize:vertical;min-height:56px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px}
+  .chip{border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:12px;color:var(--muted);cursor:pointer}
+  .chip.on{border-color:var(--primary);color:var(--primary);background:rgba(103,214,245,.1)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px}
+  .card h4{margin:0 0 6px;font-size:13px;font-weight:600}
+  .kv{font-size:12px;color:var(--muted)}
+  .list-item{display:flex;justify-content:space-between;gap:8px;padding:7px 8px;border-radius:8px;cursor:pointer;font-size:13px}
+  .list-item:hover{background:rgba(103,214,245,.08)}
+  .deg{color:var(--primary);font-size:12px}
+  .sep{height:1px;background:var(--line);margin:12px 0}
+  .empty{color:var(--muted);font-size:13px;line-height:1.7}
+  @media (max-width:760px){
+    #app{flex-direction:column}
+    #side{width:100%;height:46%;border-left:0;border-top:1px solid var(--line)}
+    #canvasWrap{flex:1}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="canvasWrap">
+    <svg id="svg">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="18" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#96a4b2"/>
+        </marker>
+      </defs>
+      <g id="viewport"><g id="edges"></g><g id="nodes"></g></g>
+    </svg>
+    <div id="topbar">
+      <div class="brand"><b>SJ</b> · GuangXIW</div>
+      <input id="search" placeholder="搜名字 / 标签">
+      <button class="btn primary" id="addNode">+ 人物</button>
+      <button class="btn" id="exportBtn">导出</button>
+      <button class="btn" id="importBtn">导入</button>
+      <button class="btn" id="fitBtn">归位</button>
+    </div>
+    <div id="hint">拖动节点排版 · 滚轮缩放 · 双击空白处新建人物</div>
+    <input type="file" id="fileInput" accept=".json,application/json" style="display:none">
+  </div>
+
+  <div id="side">
+    <header id="sideHeader">未选中节点 · 点一下图上的圆点</header>
+    <div id="panel"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   GuangXIW 关系网 —— 单文件版
+   数据模型：nodes[]（人/组织/地点/账号/其他）+ edges[]（关系）
+   全部数据存本机 localStorage，导出/导入走 JSON 文件
+   ============================================================ */
+
+const TYPES = [["person","人"],["org","组织"],["place","地点"],["account","账号"],["other","其他"]];
+const RELS  = ["亲属","同事","同学","好友","资金","同平台","其他"];
+const TYPE_COLOR = {person:"#67d6f5", org:"#b0bcf5", place:"#e8c885", account:"#8fe3b0", other:"#96a4b2"};
+const STORE_KEY = "guangxiw.v1";
+
+let state = { nodes:[], edges:[] };
+let selectedId = null;
+let view = { x:0, y:0, k:1 };
+let drag = null;        // {id, dx, dy} 拖节点
+let panning = null;     // {sx, sy, vx, vy} 拖画布
+
+const svg = document.getElementById("svg");
+const gNodes = document.getElementById("nodes");
+const gEdges = document.getElementById("edges");
+const viewport = document.getElementById("viewport");
+
+/* ---------- 存取 ---------- */
+function save(){
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }catch(e){}
+}
+function load(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if(raw){
+      const d = JSON.parse(raw);
+      state.nodes = d.nodes || [];
+      state.edges = d.edges || [];
+    }
+  }catch(e){}
+  if(!state.nodes.length) seed();
+}
+function seed(){
+  // 首次打开给个示范，照着改就行
+  const a = mkNode("张三","person",["目标"]);
+  const b = mkNode("李四","person",["同学"]);
+  const c = mkNode("某科技公司","org",["单位"]);
+  state.edges.push(mkEdge(a.id,b.id,"同学",3,"高中同桌"));
+  state.edges.push(mkEdge(a.id,c.id,"同事",5,"同公司"));
+  save();
+}
+const uid = p => p + Math.random().toString(36).slice(2,8);
+const mkNode = (name,type,tags)=>({id:uid("n"),name,type:type||"person",tags:tags||[],note:"",x:0,y:0});
+const mkEdge = (from,to,type,strength,note,evidence)=>({id:uid("e"),from,to,type:type||"其他",
+  strength:strength||3,note:note||"",evidence:evidence||""});
+
+/* ---------- 布局：简易力导向 ---------- */
+function layout(iter){
+  const N = state.nodes, E = state.edges;
+  if(!N.length) return;
+  const W = svg.clientWidth || 800, H = svg.clientHeight || 600;
+  // 初始化位置（没有坐标的摆成圆）
+  N.forEach((n,i)=>{
+    if(typeof n.x !== "number" || isNaN(n.x)){
+      const ang = i / N.length * Math.PI * 2;
+      n.x = Math.cos(ang) * Math.min(W,H) * 0.3;
+      n.y = Math.sin(ang) * Math.min(W,H) * 0.3;
+    }
+  });
+  const byId = Object.fromEntries(N.map(n=>[n.id,n]));
+  for(let step=0; step<iter; step++){
+    const f = {};
+    N.forEach(n=>f[n.id] = {x:0,y:0});
+    // 斥力
+    for(let i=0;i<N.length;i++) for(let j=i+1;j<N.length;j++){
+      const a=N[i], b=N[j];
+      let dx=b.x-a.x, dy=b.y-a.y, d2=dx*dx+dy*dy || 0.01, d=Math.sqrt(d2);
+      const rep = 9000 / d2;
+      const ux=dx/d, uy=dy/d;
+      f[a.id].x -= ux*rep; f[a.id].y -= uy*rep;
+      f[b.id].x += ux*rep; f[b.id].y += uy*rep;
+    }
+    // 弹簧（关系越强越短）
+    E.forEach(e=>{
+      const a=byId[e.from], b=byId[e.to]; if(!a||!b) return;
+      const dx=b.x-a.x, dy=b.y-a.y, d=Math.sqrt(dx*dx+dy*dy)||0.01;
+      const rest = 190 - (e.strength||3)*18;
+      const k = 0.012 * (1 + (e.strength||3)/5);
+      const pull = (d - rest) * k;
+      const ux=dx/d, uy=dy/d;
+      f[a.id].x += ux*pull; f[a.id].y += uy*pull;
+      f[b.id].x -= ux*pull; f[b.id].y -= uy*pull;
+    });
+    // 向心
+    N.forEach(n=>{ f[n.id].x -= n.x*0.006; f[n.id].y -= n.y*0.006; });
+    // 应用（拖拽中的节点不动）
+    N.forEach(n=>{
+      if(drag && drag.id === n.id) return;
+      const lim = 40;
+      n.x += Math.max(-lim, Math.min(lim, f[n.id].x));
+      n.y += Math.max(-lim, Math.min(lim, f[n.id].y));
+    });
+  }
+}
+
+/* ---------- 渲染 ---------- */
+function esc(s){ return String(s??"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function render(){
+  const q = document.getElementById("search").value.trim().toLowerCase();
+  const deg = {}; state.edges.forEach(e=>{
+    deg[e.from]=(deg[e.from]||0)+1; deg[e.to]=(deg[e.to]||0)+1;
+  });
+  // 边
+  gEdges.innerHTML = state.edges.map(e=>{
+    const a = state.nodes.find(n=>n.id===e.from), b = state.nodes.find(n=>n.id===e.to);
+    if(!a||!b) return "";
+    const w = 1 + (e.strength||3)*0.7;
+    const active = selectedId && (e.from===selectedId || e.to===selectedId);
+    return `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"
+      stroke="${active?"#67d6f5":"#2f3b47"}" stroke-width="${w}" marker-end="url(#arrow)"
+      stroke-linecap="round"><title>${esc(a.name)} — ${esc(e.type)} — ${esc(b.name)}　强度 ${e.strength||3}${e.note?"　"+esc(e.note):""}</title></line>`;
+  }).join("");
+  // 节点
+  gNodes.innerHTML = state.nodes.map(n=>{
+    const hit = q && (n.name.toLowerCase().includes(q) || (n.tags||[]).join(",").toLowerCase().includes(q));
+    const sel = n.id===selectedId;
+    const r = 16 + Math.min(10, (deg[n.id]||0)*2);
+    const color = TYPE_COLOR[n.type] || TYPE_COLOR.other;
+    return `<g class="node" data-id="${n.id}" transform="translate(${n.x},${n.y})" style="cursor:pointer">
+      ${hit?`<circle r="${r+6}" fill="none" stroke="#e8c885" stroke-width="2"/>`:""}
+      <circle r="${r}" fill="${sel?"rgba(103,214,245,.25)":"#141a21"}" stroke="${sel?"#67d6f5":color}" stroke-width="${sel?3:2}"/>
+      <text y="4" text-anchor="middle" font-size="11" fill="#e6edf3">${esc(n.name.slice(0,4))}</text>
+      <text y="${r+14}" text-anchor="middle" font-size="11" fill="#96a4b2">${esc(n.name)}</text>
+    </g>`;
+  }).join("");
+  applyView();
+  renderPanel();
+}
+
+function applyView(){
+  viewport.setAttribute("transform", `translate(${view.x},${view.y}) scale(${view.k})`);
+}
+
+/* ---------- 侧栏 ---------- */
+function renderPanel(){
+  const side = document.getElementById("panel");
+  const header = document.getElementById("sideHeader");
+  const node = state.nodes.find(n=>n.id===selectedId);
+  const deg = {}; state.edges.forEach(e=>{deg[e.from]=(deg[e.from]||0)+1;deg[e.to]=(deg[e.to]||0)+1;});
+
+  if(!node){
+    header.textContent = "未选中节点 · 点一下图上的圆点";
+    const top = [...state.nodes].sort((a,b)=>(deg[b.id]||0)-(deg[a.id]||0)).slice(0,5);
+    side.innerHTML = `
+      <div class="card">
+        <h4>关键人物（连接最多）</h4>
+        ${top.length? top.map(n=>`<div class="list-item" data-jump="${n.id}">
+            <span>${esc(n.name)}</span><span class="deg">${deg[n.id]||0} 条</span></div>`).join("")
+          : `<div class="empty">还没有节点，点上方「+ 人物」开始。</div>`}
+      </div>
+      <div class="card">
+        <h4>这张网里有多少东西</h4>
+        <div class="kv">节点 ${state.nodes.length} 个 · 关系 ${state.edges.length} 条</div>
+        <div class="sep"></div>
+        <button class="btn" id="importSJ" style="width:100%">导入 SJ Lens 备份</button>
+        <div class="kv" style="margin-top:8px">把 SJ Lens 里「导出数据」的 JSON 选进来，目标会变成节点。</div>
+      </div>`;
+    side.querySelectorAll("[data-jump]").forEach(el=>el.onclick=()=>{selectedId=el.dataset.jump;render();});
+    const sj = side.querySelector("#importSJ");
+    if(sj) sj.onclick = ()=>{ pickFile(importSJBackup); };
+    return;
+  }
+
+  header.textContent = `已选中：${node.name}`;
+  const rels = state.edges.filter(e=>e.from===node.id||e.to===node.id);
+  const others = state.nodes.filter(n=>n.id!==node.id);
+
+  side.innerHTML = `
+    <div class="row"><label>名字</label><input id="nName" value="${esc(node.name)}"></div>
+    <div class="row"><label>类型</label>
+      <select id="nType">${TYPES.map(([v,l])=>`<option value="${v}" ${node.type===v?"selected":""}>${l}</option>`).join("")}</select>
+    </div>
+    <div class="row"><label>标签</label><input id="nTags" value="${esc((node.tags||[]).join(","))}" placeholder="逗号分隔"></div>
+    <div class="row"><label>备注</label><textarea id="nNote">${esc(node.note||"")}</textarea></div>
+    <div class="row">
+      <button class="btn primary" id="saveNode" style="flex:1">保存</button>
+      <button class="btn danger" id="delNode">删除</button>
+    </div>
+
+    <div class="sep"></div>
+    <div class="card">
+      <h4>添加关系（${rels.length} 条）</h4>
+      <div class="row"><label>对方</label><input id="eTo" list="nodeList" placeholder="名字（不存在会自动新建）">
+        <datalist id="nodeList">${others.map(n=>`<option value="${esc(n.name)}">`).join("")}</datalist>
+      </div>
+      <div class="row"><label>类型</label>
+        <select id="eType">${RELS.map(r=>`<option>${r}</option>`).join("")}</select>
+      </div>
+      <div class="chips" id="strChips">${[1,2,3,4,5].map(s=>`<div class="chip ${s===3?"on":""}" data-s="${s}">强度 ${s}</div>`).join("")}</div>
+      <div class="row"><label>证据号</label><input id="eEvid" placeholder="如 E-003（可空）"></div>
+      <div class="row"><label>备注</label><input id="eNote" placeholder="怎么认识的 / 依据"></div>
+      <button class="btn primary" id="addRel" style="width:100%">建立关系</button>
+    </div>
+
+    <div class="card">
+      <h4>已有关联</h4>
+      ${rels.length? rels.map(e=>{
+        const other = state.nodes.find(n=>n.id===(e.from===node.id?e.to:e.from));
+        return `<div class="list-item" data-rel="${e.id}">
+          <span>${esc(other?other.name:"?")} · ${esc(e.type)}</span>
+          <span class="deg">强度 ${e.strength||3}</span></div>`;
+      }).join("") : `<div class="empty">还没有关系。</div>`}
+    </div>`;
+
+  // 交互绑定
+  let strength = 3;
+  side.querySelectorAll("#strChips .chip").forEach(ch=>ch.onclick=()=>{
+    strength = +ch.dataset.s;
+    side.querySelectorAll("#strChips .chip").forEach(c=>c.classList.toggle("on", c===ch));
+  });
+  side.querySelector("#saveNode").onclick = ()=>{
+    node.name = side.querySelector("#nName").value.trim() || node.name;
+    node.type = side.querySelector("#nType").value;
+    node.tags = side.querySelector("#nTags").value.split(",").map(s=>s.trim()).filter(Boolean);
+    node.note = side.querySelector("#nNote").value.trim();
+    save(); render();
+  };
+  side.querySelector("#delNode").onclick = ()=>{
+    state.nodes = state.nodes.filter(n=>n.id!==node.id);
+    state.edges = state.edges.filter(e=>e.from!==node.id && e.to!==node.id);
+    selectedId = null; save(); render();
+  };
+  side.querySelector("#addRel").onclick = ()=>{
+    const name = side.querySelector("#eTo").value.trim();
+    const type = side.querySelector("#eType").value;
+    const evid = side.querySelector("#eEvid").value.trim();
+    const note = side.querySelector("#eNote").value.trim();
+    if(!name) return;
+    let other = state.nodes.find(n=>n.name===name);
+    if(!other){ other = mkNode(name,"person",[]); state.nodes.push(other); }
+    // 已存在同向关系则更新强度
+    const dup = state.edges.find(e=>(e.from===node.id&&e.to===other.id)||(e.from===other.id&&e.to===node.id));
+    if(dup){ dup.strength = strength; if(evid) dup.evidence = evid; if(note) dup.note = note; }
+    else state.edges.push(mkEdge(node.id, other.id, type, strength, note, evid));
+    save(); layout(120); render();
+  };
+  side.querySelectorAll("[data-rel]").forEach(el=>el.onclick=()=>{
+    const e = state.edges.find(x=>x.id===el.dataset.rel);
+    if(!e) return;
+    if(confirm(`删除这条关系？（${e.type} 强度 ${e.strength}）`)){
+      state.edges = state.edges.filter(x=>x.id!==e.id); save(); render();
+    }
+  });
+}
+
+/* ---------- 画布交互 ---------- */
+function toWorld(clientX, clientY){
+  const r = svg.getBoundingClientRect();
+  return { x:(clientX-r.left-view.x)/view.k, y:(clientY-r.top-view.y)/view.k };
+}
+svg.addEventListener("pointerdown", ev=>{
+  const nodeEl = ev.target.closest(".node");
+  if(nodeEl){
+    const n = state.nodes.find(x=>x.id===nodeEl.dataset.id);
+    const p = toWorld(ev.clientX, ev.clientY);
+    drag = { id:n.id, dx:p.x-n.x, dy:p.y-n.y };
+    selectedId = n.id; render();
+    svg.setPointerCapture(ev.pointerId);
+    return;
+  }
+  panning = { sx:ev.clientX, sy:ev.clientY, vx:view.x, vy:view.y };
+  svg.classList.add("dragging");
+  svg.setPointerCapture(ev.pointerId);
+});
+svg.addEventListener("pointermove", ev=>{
+  if(drag){
+    const n = state.nodes.find(x=>x.id===drag.id); if(!n) return;
+    const p = toWorld(ev.clientX, ev.clientY);
+    n.x = p.x - drag.dx; n.y = p.y - drag.dy;
+    render();
+  } else if(panning){
+    view.x = panning.vx + (ev.clientX - panning.sx);
+    view.y = panning.vy + (ev.clientY - panning.sy);
+    applyView();
+  }
+});
+svg.addEventListener("pointerup", ev=>{
+  if(drag){ drag = null; save(); }
+  panning = null; svg.classList.remove("dragging");
+});
+svg.addEventListener("dblclick", ev=>{
+  if(ev.target.closest(".node")) return;
+  const name = prompt("新人物名字");
+  if(!name) return;
+  const p = toWorld(ev.clientX, ev.clientY);
+  const n = mkNode(name.trim(),"person",[]);
+  n.x = p.x; n.y = p.y;
+  state.nodes.push(n); selectedId = n.id; save(); render();
+});
+svg.addEventListener("wheel", ev=>{
+  ev.preventDefault();
+  const before = toWorld(ev.clientX, ev.clientY);
+  view.k = Math.min(2.5, Math.max(0.3, view.k * (ev.deltaY>0?0.9:1.1)));
+  const after = toWorld(ev.clientX, ev.clientY);
+  view.x += (after.x-before.x)*view.k;
+  view.y += (after.y-before.y)*view.k;
+  applyView();
+},{passive:false});
+
+/* ---------- 顶栏按钮 ---------- */
+document.getElementById("addNode").onclick = ()=>{
+  const name = prompt("新人物名字");
+  if(!name) return;
+  const n = mkNode(name.trim(),"person",[]); state.nodes.push(n);
+  selectedId = n.id; layout(80); save(); render();
+};
+document.getElementById("fitBtn").onclick = ()=>{ view={x:0,y:0,k:1}; layout(160); render(); };
+document.getElementById("search").oninput = render;
+document.getElementById("exportBtn").onclick = ()=>{
+  const blob = new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "guangxiw-" + new Date().toISOString().slice(0,10) + ".json";
+  a.click(); URL.revokeObjectURL(a.href);
+};
+document.getElementById("importBtn").onclick = ()=> pickFile(importOwn);
+const fileInput = document.getElementById("fileInput");
+let fileHandler = null;
+function pickFile(fn){ fileHandler = fn; fileInput.value=""; fileInput.click(); }
+fileInput.onchange = ()=>{
+  const f = fileInput.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ()=>{ try{ const d = JSON.parse(r.result); fileHandler && fileHandler(d); }catch(e){ alert("文件不是合法 JSON"); } };
+  r.readAsText(f);
+};
+function importOwn(d){
+  if(!d || !Array.isArray(d.nodes)) return alert("不是 GuangXIW 的导出文件");
+  if(!confirm(`导入 ${d.nodes.length} 个节点 / ${(d.edges||[]).length} 条关系？会覆盖当前数据`)) return;
+  state.nodes = d.nodes; state.edges = d.edges || [];
+  selectedId = null; save(); layout(160); render();
+}
+
+/* ---------- 导入 SJ Lens 备份 ---------- */
+function importSJBackup(d){
+  if(!d || !Array.isArray(d.persons)) return alert("不是 SJ Lens 的导出文件（缺 persons 字段）");
+  let added = 0, rels = 0;
+  d.persons.forEach(p=>{
+    let node = state.nodes.find(n=>n.name === p.name);
+    if(!node){ node = mkNode(p.name,"person",["SJ目标"]); state.nodes.push(node); added++; }
+    (p.accounts||[]).forEach(acc=>{
+      const label = acc.label || acc.platform || "账号";
+      const name = p.name + "·" + label;
+      let an = state.nodes.find(n=>n.name===name);
+      if(!an){ an = mkNode(name,"account",[acc.platform||""]); state.nodes.push(an); added++; }
+      if(!state.edges.some(e=>(e.from===node.id&&e.to===an.id)||(e.from===an.id&&e.to===node.id))){
+        state.edges.push(mkEdge(node.id, an.id, "同平台", 4, "SJ Lens 账号")); rels++;
+      }
+    });
+  });
+  save(); layout(160); render();
+  alert(`导入完成：新增 ${added} 个节点、${rels} 条关系`);
+}
+
+/* ---------- 启动 ---------- */
+load();
+layout(200);
+render();
+window.addEventListener("resize", ()=>render());
+</script>
+</body>
+</html>
