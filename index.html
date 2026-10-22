@@ -607,8 +607,8 @@ function drawRight(){
       <div id="accList">${(n.accounts||[]).map((a,i) => `<div class="kv" data-acc="${i}">
         <span class="k">${esc(a.platform||"平台")}</span><span class="v">${esc(a.handle||"")}${a.note ? " · "+esc(a.note) : ""}</span>
         </div>`).join("") || `<div class="empty" style="padding:2px 4px">还没记账号。</div>`}</div>
-      <div class="f" style="margin-top:7px"><input type="text" id="accP" list="platList" placeholder="平台">
-        <datalist id="platList">${["抖音","快手","B站","小红书","微博","QQ","微信"].map(p=>`<option value="${p}">`).join("")}</datalist></div>
+      <div class="f" style="margin-top:7px"><select id="accP" style="width:100%">
+        ${["抖音","快手","B站","小红书","微博","QQ","微信","其他"].map(x=>`<option>${x}</option>`).join("")}</select></div>
       <div class="f"><input type="text" id="accH" placeholder="账号 / 昵称"><button class="bt" id="accAdd">加</button></div>
     </div>
 
