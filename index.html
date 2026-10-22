@@ -52,7 +52,8 @@ svg.dragging{cursor:grabbing}
 .btn:active{transform:translateY(1px)}
 .btn.primary{background:rgba(200,169,106,.12);border-color:var(--brass2);color:var(--brass)}
 .btn.ghost{background:transparent}
-  .btn.icon{width:34px;padding:0;font-size:15px;line-height:1}
+  .btn.icon{width:34px;padding:0}
+  .btn.icon svg{display:block}
 .btn.danger{color:var(--rust);border-color:#4a2f28}
 
 #capture{position:absolute;left:14px;right:96px;bottom:14px;display:flex;gap:10px;align-items:center;
@@ -157,8 +158,8 @@ textarea{resize:vertical;min-height:66px}
       <button class="btn" id="caseAdd">+ 文件夹</button>
       <input id="search" placeholder="搜索人名 / 标签">
       <div class="rightGroup">
-      <button class="btn icon" id="exportBtn" title="导出 JSON">↓</button>
-      <button class="btn icon" id="importBtn" title="导入 JSON">↑</button>
+      <button class="btn icon" id="exportBtn" title="导出 JSON"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M5 19h14"/></svg></button>
+      <button class="btn icon" id="importBtn" title="导入 JSON"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="M7.5 8.5 12 4l4.5 4.5"/><path d="M5 19h14"/></svg></button>
       <button class="btn primary" id="fitBtn">整理</button>
       <button class="btn ghost" id="toggleLeft" title="实体列表">实体</button>
       <button class="btn ghost" id="toggleSide" title="收起/展开右侧面板(Ctrl+B)">面板</button>
@@ -620,31 +621,24 @@ svg.addEventListener("wheel",ev=>{ev.preventDefault();
 document.getElementById("addNode").onclick=()=>uiPrompt("新增人物","输入名字，回车加入。","名字","",name=>{
   if(!name)return;const n=mkNode(name.trim());state.nodes.push(n);selectedId=n.id;
   layout(90);save();render();toast("已添加 "+name);});
-/* 整理：重排布局 + 按包围盒缩放居中（一次到位） */
+/* 整理：最简算法 —— 只把内容挪到画布正中，缩放与布局都不动 */
 function fitView(){
-  layout(260);
-  const N = state.nodes, W = svg.clientWidth || 900, H = svg.clientHeight || 620;
-  if(!N.length){ view = {x:0, y:0, k:1}; applyView(); renderPanel(); return; }
-  let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  const N = state.nodes;
+  if(!N.length){ view = {x:0, y:0, k:1}; applyView(); return; }
+  let x1=Infinity, y1=Infinity, x2=-Infinity, y2=-Infinity;
   N.forEach(n=>{
-    minX=Math.min(minX, n.x-NW/2); maxX=Math.max(maxX, n.x+NW/2);
-    minY=Math.min(minY, n.y-NH/2); maxY=Math.max(maxY, n.y+NH/2);
+    x1=Math.min(x1,n.x); x2=Math.max(x2,n.x);
+    y1=Math.min(y1,n.y); y2=Math.max(y2,n.y);
   });
-  const pad = 130;
-  const bw = Math.max(300, (maxX-minX)) + pad;
-  const bh = Math.max(220, (maxY-minY)) + pad;
-  const k  = Math.max(0.45, Math.min(1.35, Math.min(W/bw, H/bh)));
-  view.k = k;
-  view.x = -((minX+maxX)/2) * k;
-  view.y = -((minY+maxY)/2) * k;
+  view.x = -((x1+x2)/2);
+  view.y = -((y1+y2)/2);
   applyView();
-  render();
 }
 document.getElementById("fitBtn").onclick=()=>{
   const vp = document.getElementById("viewport");
-  vp.style.transition = "transform .26s cubic-bezier(.22,.61,.36,1)";
+  vp.style.transition = "transform .22s ease-out";
   fitView();
-  setTimeout(()=>{ vp.style.transition=""; }, 320);
+  setTimeout(()=>{ vp.style.transition = ""; }, 260);
 };
 document.getElementById("search").oninput=render;
 document.getElementById("exportBtn").onclick=()=>{
