@@ -22,9 +22,11 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--
   /* 极轻微的光晕：让笔画边缘不那么"利"，小字号下明显更柔和 */
   html,body,#topbar,#side,.card,.btn,input,select,textarea{
     text-shadow:0 0 .45px rgba(255,255,255,.18)}
-#app{display:grid;grid-template-columns:minmax(0,1fr) 352px;height:100%;
-  transition:grid-template-columns .3s cubic-bezier(.22,.61,.36,1)}
-  #app.sideHidden{grid-template-columns:minmax(0,1fr) 0px}
+#app{display:grid;grid-template-columns:214px minmax(0,1fr) 344px;height:100%;
+  transition:grid-template-columns .28s cubic-bezier(.22,.61,.36,1)}
+  #app.leftHidden{grid-template-columns:0px minmax(0,1fr) 344px}
+  #app.sideHidden{grid-template-columns:214px minmax(0,1fr) 0px}
+  #app.sideHidden.leftHidden{grid-template-columns:0px minmax(0,1fr) 0px}
 #canvasWrap{position:relative;flex:1;overflow:hidden;
   background:radial-gradient(1100px 640px at 32% -8%,#161b23 0%,var(--bg) 62%)}
 svg{display:block;width:100%;height:100%;cursor:grab;touch-action:none}
@@ -40,23 +42,38 @@ svg.dragging{cursor:grabbing}
 .brand i{font-style:normal;color:var(--brass)}
 .rightGroup{display:flex;gap:8px;align-items:center;margin-left:auto;flex:0 0 auto;
     transition:transform .22s ease}
-  #search{flex:1;max-width:250px;background:var(--card);border:1px solid var(--line2);color:var(--fg);
+  #search{flex:1 1 150px;min-width:110px;max-width:250px;background:var(--card);border:1px solid var(--line2);color:var(--fg);
   border-radius:10px;padding:9px 12px;font:13px var(--sans);outline:none;transition:.18s}
 #search:focus{border-color:var(--brass2);background:var(--card2)}
-.btn{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--line2);
+.btn{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex:none;background:var(--card);border:1px solid var(--line2);
   color:var(--fg);border-radius:8px;padding:8px 13px;font:13px var(--sans);cursor:pointer;
   transition:transform .12s,border-color .18s,background .18s,color .18s}
 .btn:hover{border-color:var(--brass2);color:var(--brass);background:var(--card2)}
 .btn:active{transform:translateY(1px)}
 .btn.primary{background:rgba(200,169,106,.12);border-color:var(--brass2);color:var(--brass)}
 .btn.ghost{background:transparent}
+  .btn.icon{width:34px;padding:0;font-size:15px;line-height:1}
 .btn.danger{color:var(--rust);border-color:#4a2f28}
 
-#capture{position:absolute;left:16px;right:16px;bottom:16px;display:flex;gap:10px;align-items:center;
+#capture{position:absolute;left:14px;right:96px;bottom:14px;display:flex;gap:10px;align-items:center;
   background:rgba(23,27,34,.95);border:1px solid var(--line2);border-radius:10px;padding:9px 12px}
 #capture input{flex:1;background:transparent;border:0;color:var(--fg);font:13.5px var(--sans);outline:none}
 #capture input::placeholder{color:var(--dim)}
 
+#leftPane{border-right:1px solid var(--line);background:var(--panel);display:flex;
+  flex-direction:column;overflow:hidden;min-width:0}
+#leftPane .ph{display:flex;align-items:center;gap:8px;padding:11px 13px;border-bottom:1px solid var(--line);
+  font-size:11px;color:var(--muted);letter-spacing:.12em}
+#leftPane .ph b{margin-left:auto;font-weight:500;color:var(--dim);letter-spacing:0}
+#typeFilters{display:flex;flex-wrap:wrap;gap:5px;padding:10px 11px 4px}
+#entityList{flex:1;overflow:auto;padding:4px 8px 16px}
+.erow{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;cursor:pointer;
+  transition:.14s;font-size:13.5px}
+.erow:hover{background:#1b2028}
+.erow.sel{background:rgba(200,169,106,.13)}
+.erow .dt{width:7px;height:7px;border-radius:50%;flex:none}
+.erow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.erow .dg{font-size:11px;color:var(--rust);flex:none}
 #side{width:auto;min-width:0;overflow:hidden;border-left:1px solid var(--line);background:var(--panel);
   display:flex;flex-direction:column;transition:opacity .22s,border-color .3s}
 #app.sideHidden #side{opacity:0;border-left-color:transparent}
@@ -106,6 +123,14 @@ textarea{resize:vertical;min-height:66px}
 </head>
 <body>
 <div id="app">
+  <aside id="leftPane">
+    <div class="ph">实体 <b id="countLbl"></b>
+      <select id="layoutSel" style="width:96px;height:24px;font-size:11.5px;padding:0 6px;margin-left:6px">
+        <option value="force">力导向</option><option value="circle">环形</option><option value="degree">按连接数</option>
+      </select></div>
+    <div id="typeFilters"></div>
+    <div id="entityList"></div>
+  </aside>
   <div id="canvasWrap">
     <svg id="svg"><g id="viewport"><g id="edges"></g><g id="nodes"></g></g></svg>
     <div id="topbar">
@@ -132,16 +157,17 @@ textarea{resize:vertical;min-height:66px}
       <button class="btn" id="caseAdd">+ 文件夹</button>
       <input id="search" placeholder="搜索人名 / 标签">
       <div class="rightGroup">
-      <button class="btn primary" id="addNode">+ 新增人物</button>
-      <button class="btn" id="exportBtn">导出</button>
-      <button class="btn" id="importBtn">导入</button>
-      <button class="btn ghost" id="fitBtn">整理</button>
-      <button class="btn ghost" id="toggleSide" title="收起/展开右侧面板(Ctrl+B)">收起面板</button>
+      <button class="btn icon" id="exportBtn" title="导出 JSON">↓</button>
+      <button class="btn icon" id="importBtn" title="导入 JSON">↑</button>
+      <button class="btn primary" id="fitBtn">整理</button>
+      <button class="btn ghost" id="toggleLeft" title="实体列表">实体</button>
+      <button class="btn ghost" id="toggleSide" title="收起/展开右侧面板(Ctrl+B)">面板</button>
       </div>
     </div>
     <div id="capture">
       <input id="capInput" placeholder="速记：选中某人就补进备注，没选就新建一条（回车）">
       <button class="btn primary" id="capBtn">记一笔</button>
+      <button class="btn" id="addNode" title="新增人物">+ 人物</button>
     </div>
     <div class="overlay" id="overlay">
       <div class="modal">
@@ -187,7 +213,7 @@ const typeColor=t=>TYPE_COLOR[t]||"#9aa6b8";
 const typeLabel=t=>TYPE_LABEL[t]||t||"其他";
 const RELS=["亲属","同事","同学","好友","资金","同平台","其他"];
 const KEY="guangxiw.v1";
-const APP_VERSION="0.9.7";
+const APP_VERSION="1.0.0";
 let state={nodes:[],edges:[]},selectedId=null,view={x:0,y:0,k:1},drag=null,panning=null;
 const svg=document.getElementById("svg"),gN=document.getElementById("nodes"),
       gE=document.getElementById("edges"),gV=document.getElementById("viewport");
@@ -217,11 +243,11 @@ function load(){
       const d=JSON.parse(raw);
       if(Array.isArray(d.cases)&&d.cases.length){ cases=d.cases; curId=d.cur||cases[0].id; }
       else if(Array.isArray(d.nodes)){ // 老数据：迁移成一个案例
-        cases=[{id:uid("c"),name:"默认案例",nodes:d.nodes,edges:d.edges||[]}]; curId=cases[0].id;
+        cases=[{id:uid("c"),name:"默认文件夹",nodes:d.nodes,edges:d.edges||[]}]; curId=cases[0].id;
       }
     }
   }catch(e){}
-  if(!cases.length){ const c=blankCase("默认案例"); cases=[c]; curId=c.id; }
+  if(!cases.length){ const c=blankCase("默认文件夹"); cases=[c]; curId=c.id; }
   syncState();
   const sel=document.getElementById("caseSel");
   sel.innerHTML=cases.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join("");
@@ -364,6 +390,7 @@ function render(){
     </g>`;}).join("");
   applyView();
   renderPanel();
+  renderEntityList();
 }
 
 /* 侧栏 */
@@ -682,7 +709,71 @@ function quickCapture(){
 document.getElementById("capBtn").onclick=quickCapture;
 document.getElementById("capInput").addEventListener("keydown",e=>{if(e.key==="Enter")quickCapture();});
 
-load();layout(220);render();applySide();
+/* ---------- 左栏实体表 / 布局预设 ---------- */
+let filterType = null;
+function layoutPreset(kind){
+  const N = state.nodes, E = state.edges;
+  if(!N.length) return;
+  if(kind === "circle"){
+    const R = Math.max(190, N.length * 24);
+    N.forEach((n,i)=>{ const a = i/N.length*Math.PI*2 - Math.PI/2;
+      n.x = Math.cos(a)*R; n.y = Math.sin(a)*R; });
+    return;
+  }
+  if(kind === "degree"){
+    const deg = {}; E.forEach(e=>{ deg[e.from]=(deg[e.from]||0)+1; deg[e.to]=(deg[e.to]||0)+1; });
+    const arr = [...N].sort((a,b)=>(deg[b.id]||0)-(deg[a.id]||0));
+    const cols = Math.max(1, Math.ceil(Math.sqrt(arr.length)));
+    arr.forEach((n,i)=>{ n.x = (i%cols)*250 - (cols-1)*125; n.y = Math.floor(i/cols)*140; });
+    return;
+  }
+  layout(260);
+}
+function renderEntityList(){
+  const box = document.getElementById("entityList");
+  if(!box) return;
+  const deg = {}; state.edges.forEach(e=>{ deg[e.from]=(deg[e.from]||0)+1; deg[e.to]=(deg[e.to]||0)+1; });
+  const q = (document.getElementById("search").value || "").trim().toLowerCase();
+  const list = state.nodes.filter(n=>{
+    if(filterType && n.type !== filterType) return false;
+    if(!q) return true;
+    return n.name.toLowerCase().includes(q) || (n.tags||[]).join(",").toLowerCase().includes(q);
+  }).sort((a,b)=>(deg[b.id]||0)-(deg[a.id]||0));
+  document.getElementById("countLbl").textContent = list.length + "/" + state.nodes.length;
+  if(!list.length){ box.innerHTML = '<div style="font-size:12.5px;color:#6f747e;padding:12px">没有匹配的实体</div>'; return; }
+  box.innerHTML = list.map(n=>
+    '<div class="erow' + (selectedId===n.id?" sel":"") + '" data-jump="' + n.id + '">' +
+      '<span class="dt" style="background:' + typeColor(n.type) + '"></span>' +
+      '<span class="nm">' + esc(n.name) + '</span>' +
+      '<span class="dg">' + (deg[n.id]||0) + '</span></div>').join("");
+  box.querySelectorAll("[data-jump]").forEach(el=>{
+    el.onclick = ()=>{
+      selectedId = el.dataset.jump;
+      const n = state.nodes.find(x=>x.id===selectedId);
+      if(n){ view.x = -n.x*view.k; view.y = -n.y*view.k; applyView(); }
+      render();
+    };
+  });
+}
+function buildTypeFilters(){
+  const box = document.getElementById("typeFilters");
+  if(!box) return;
+  box.innerHTML = '<span class="chip' + (filterType===null?" on":"") + '" data-t="">全部</span>' +
+    TYPES.map(([v,l])=>'<span class="chip' + (filterType===v?" on":"") + '" data-t="' + v + '">' + l + '</span>').join("");
+  box.querySelectorAll(".chip").forEach(el=>el.onclick=()=>{
+    filterType = el.dataset.t || null;
+    buildTypeFilters(); render();
+  });
+}
+document.getElementById("layoutSel").onchange = ()=>{
+  layoutPreset(document.getElementById("layoutSel").value); render(); fitView(true);
+};
+document.getElementById("toggleLeft").onclick = ()=>{
+  document.getElementById("app").classList.toggle("leftHidden");
+  setTimeout(()=>fitView(false), 260);
+};
+
+load();layout(220);buildTypeFilters();render();applySide();
 let rzT=null;
 window.addEventListener("resize",()=>{ clearTimeout(rzT); rzT=setTimeout(fitView,180); });
 </script>
