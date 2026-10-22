@@ -138,18 +138,20 @@ textarea{resize:vertical;min-height:66px}
     #side{width:100%;border-left:0;border-top:1px solid var(--line)}
   }
   #canvasWrap > .edgeTab svg{width:13px;height:13px;opacity:.9}
-#canvasWrap > .edgeTab{position:fixed;top:50%;z-index:40;width:16px;height:56px;padding:0;
+#canvasWrap > .edgeTab{position:fixed;top:50%;z-index:40;height:44px;padding:0;
     display:flex;align-items:center;justify-content:center;cursor:pointer;
-    background:var(--panel);border:1px solid var(--line);color:var(--muted);
-    transform:translateY(-50%);
+    border:0;color:var(--muted);transform:translateY(-50%);
+    background:var(--panel);
     transition:left .28s cubic-bezier(.22,.61,.36,1),right .28s cubic-bezier(.22,.61,.36,1),
-               background .2s,color .2s,border-color .2s}
-  #canvasWrap > .edgeTab.left{left:214px;border-left:0;border-radius:0 8px 8px 0}
+               background .2s,color .2s,width .2s}
+  /* 展开：把手从面板内缘伸出来一点点 */
+  #canvasWrap > .edgeTab.left{left:214px;width:11px;border-radius:0 6px 6px 0}
+  #canvasWrap > .edgeTab.right{right:344px;width:11px;border-radius:6px 0 0 6px}
+  /* 收起：把手贴回窗口边缘，颜色融进画布 */
   #app.leftHidden #canvasWrap > .edgeTab.left{left:0;background:#14181e}
-  #canvasWrap > .edgeTab.right{right:344px;border-right:0;border-radius:8px 0 0 8px}
   #app.sideHidden #canvasWrap > .edgeTab.right{right:0;background:#14181e}
-  #canvasWrap > .edgeTab:hover{color:var(--brass);border-color:var(--brass2)}
-  #canvasWrap > .edgeTab svg{width:12px;height:12px;transition:transform .25s ease}
+  #canvasWrap > .edgeTab:hover{color:var(--brass)}
+  #canvasWrap > .edgeTab svg{width:11px;height:11px;opacity:.75;transition:transform .25s ease}
   #app.leftHidden #canvasWrap > .edgeTab.left svg{transform:rotate(180deg)}
   #app.sideHidden #canvasWrap > .edgeTab.right svg{transform:rotate(180deg)}
 </style>
