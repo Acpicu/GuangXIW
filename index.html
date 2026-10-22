@@ -166,7 +166,7 @@ textarea{resize:vertical;min-height:66px}
       </div>
     </div>
     <div id="capture">
-      <input id="capInput" placeholder="速记：选中某人就补进备注，没选就新建一条（回车）">
+      <input id="capInput" placeholder="速记：选中某人就记到他名下，没选就新建一条（回车）">
       <button class="btn primary" id="capBtn">记一笔</button>
       <button class="btn" id="addNode" title="新增人物">+ 人物</button>
     </div>
@@ -220,8 +220,13 @@ const svg=document.getElementById("svg"),gN=document.getElementById("nodes"),
       gE=document.getElementById("edges"),gV=document.getElementById("viewport");
 const NW=152,NH=58;
 const uid=p=>p+Math.random().toString(36).slice(2,8);
-const mkNode=(name,type,tags)=>({id:uid("n"),name,type:type||"person",tags:tags||[],note:"",x:0,y:0,avatar:""});
+const mkNode=(name,type,tags)=>({id:uid("n"),name,type:type||"person",tags:tags||[],note:"",events:[],x:0,y:0,avatar:""});
 const mkEdge=(from,to,type,s,note,ev)=>({id:uid("e"),from,to,type:type||"其他",strength:s||3,note:note||"",evidence:ev||""});
+function fmtTime(ts){
+  const d = new Date(ts);
+  const p = n => String(n).padStart(2,"0");
+  return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 /* 多案例（文件夹）：一个案例 = 一份独立的关系网，像 SJ Lens 的文件夹 */
@@ -250,16 +255,18 @@ function load(){
   }catch(e){}
   if(!cases.length){ const c=blankCase("默认文件夹"); cases=[c]; curId=c.id; }
   syncState();
-  const sel=document.getElementById("caseSel");
-  sel.innerHTML=cases.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join("");
-  sel.value=curId;
-  sel.onchange=()=>{ curId=sel.value; syncState(); selectedId=null; layout(200); save(); render(); };
+  const sel=document.getElementById("folderSel")||document.getElementById("caseSel");
+  if(sel){
+    sel.innerHTML=cases.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join("");
+    sel.value=curId;
+    sel.onchange=()=>{ curId=sel.value; syncState(); selectedId=null; layout(200); save(); render(); };
+  }
 }
 function addCase(){
   uiPrompt("新建文件夹","一个文件夹装一个调查目标（某公司 / 某医院）。","文件夹名","",name=>{
     if(!name) return;
     const c=blankCase(name.trim()); cases.push(c); curId=c.id; syncState();
-    const sel=document.getElementById("caseSel");
+    const sel=document.getElementById("folderSel")||document.getElementById("caseSel");
     sel.innerHTML=cases.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join("");
     sel.value=curId; selectedId=null; layout(200); save(); render(); toast("已新建文件夹 "+name);
   });
@@ -275,7 +282,7 @@ function deleteCase(){
   if(cases.length<=1) return toast("至少保留一个文件夹");
   uiConfirm("删除文件夹？",`「${c.name}」里 ${c.nodes.length} 个节点会一起删除，无法撤销。`,()=>{
     cases=cases.filter(x=>x.id!==c.id); curId=cases[0].id; syncState();
-    const sel=document.getElementById("caseSel");
+    const sel=document.getElementById("folderSel")||document.getElementById("caseSel");
     sel.innerHTML=cases.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join("");
     sel.value=curId; selectedId=null; layout(200); save(); render(); toast("已删除文件夹");
   });
@@ -447,7 +454,20 @@ function renderPanel(){
       <datalist id="typeList">${TYPES.map(([v,l])=>`<option value="${l}">`).join("")}</datalist>
     </div>
     <div class="row"><label>标签</label><input id="nTags" value="${esc((node.tags||[]).join(","))}" placeholder="逗号分隔"></div>
-    <div class="row" style="align-items:flex-start"><label>备注</label><textarea id="nNote">${esc(node.note||"")}</textarea></div>
+    <div class="card" style="margin-top:12px">
+      <h4>记录 <span class="kv">${(node.events||[]).length} 条</span></h4>
+      <div class="row" style="margin-bottom:8px">
+        <input id="evText" placeholder="这条线索是什么？回车记录">
+        <button class="btn primary" id="evAdd" style="flex:none">记录</button>
+      </div>
+      <div id="evList">
+        ${((node.events||[]).slice().sort((a,b)=>b.at-a.at)).map((e,i)=>`
+          <div class="rel" data-ev="${i}">
+            <span style="flex:1;min-width:0">${esc(e.text)}</span>
+            <span style="color:var(--dim);flex:none">${fmtTime(e.at)}</span>
+          </div>`).join("") || `<div class="empty" style="font-size:12.5px">还没有记录。</div>`}
+      </div>
+    </div>
     <div class="row"><button class="btn primary" id="saveNode" style="flex:1">保存</button><button class="btn danger" id="delNode">删除</button></div>
     <div class="card" style="margin-top:14px"><h4>建立关系<span class="kv">${rels.length} 条</span></h4>
       <div class="row"><label>对方</label><input id="eTo" list="nl" placeholder="名字（不存在会自动创建）">
@@ -472,7 +492,29 @@ function renderPanel(){
     const known=TYPES.find(([v,l])=>l===typeText);
     node.type = known ? known[0] : typeText;
     node.tags=side.querySelector("#nTags").value.split(",").map(s=>s.trim()).filter(Boolean);
-    node.note=side.querySelector("#nNote").value;save();render();toast("已保存");};
+    save();render();toast("已保存");};
+
+  // 事件记录：回车或点「记录」都能加，点条目删除
+  const evInput = side.querySelector("#evText");
+  const addEvent = ()=>{
+    const v = (evInput.value||"").trim();
+    if(!v) return;
+    if(!node.events) node.events = [];
+    node.events.push({ at: Date.now(), text: v });
+    evInput.value = "";
+    save(); render(); toast("已记录");
+  };
+  side.querySelector("#evAdd").onclick = addEvent;
+  if(evInput) evInput.addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); addEvent(); } });
+  side.querySelectorAll("[data-ev]").forEach(el=>el.onclick=()=>{
+    const arr = (node.events||[]).slice().sort((a,b)=>b.at-a.at);
+    const item = arr[+el.dataset.ev];
+    if(!item) return;
+    uiConfirm("删除这条记录？", item.text, ()=>{
+      node.events = (node.events||[]).filter(x=>!(x.at===item.at && x.text===item.text));
+      save(); render(); toast("已删除");
+    });
+  });
   side.querySelector("#delNode").onclick=()=>uiConfirm("删除这个节点？","相连的关系会一起删除，无法撤销。",()=>{
     state.nodes=state.nodes.filter(n=>n.id!==node.id);
     state.edges=state.edges.filter(e=>e.from!==node.id&&e.to!==node.id);
@@ -589,6 +631,7 @@ const vw=()=>(svg.clientWidth||900)/2, vh=()=>(svg.clientHeight||620)/2;
 const applyView=()=>gV.setAttribute("transform",`translate(${view.x+vw()},${view.y+vh()}) scale(${view.k})`);
 const toWorld=(cx,cy)=>{const r=svg.getBoundingClientRect();
   return{x:(cx-r.left-view.x-vw())/view.k,y:(cy-r.top-view.y-vh())/view.k};};
+svg.addEventListener("contextmenu",ev=>ev.preventDefault());
 svg.addEventListener("pointerdown",ev=>{
   ev.preventDefault();          // 阻止浏览器把拖拽当成文字选择
   window.getSelection && window.getSelection().removeAllRanges();
@@ -696,8 +739,8 @@ function quickCapture(){
   const d=new Date(),stamp=`${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")} `
     +`${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
   const node=state.nodes.find(n=>n.id===selectedId);
-  if(node){node.note=(node.note?node.note+"\n":"")+`[${stamp}] ${text}`;toast("已写入 "+node.name+" 的备注");}
-  else{const n=mkNode(text.slice(0,18),"other",["速记"]);n.note=`[${stamp}] ${text}`;
+  if(node){ if(!node.events) node.events=[]; node.events.push({at:Date.now(),text}); toast("已记录到 "+node.name); }
+  else{const n=mkNode(text.slice(0,18),"other",["速记"]);n.events=[{at:Date.now(),text}];
     state.nodes.push(n);selectedId=n.id;toast("已新建速记节点");}
   inp.value="";save();layout(70);render();}
 document.getElementById("capBtn").onclick=quickCapture;
@@ -767,7 +810,27 @@ document.getElementById("toggleLeft").onclick = ()=>{
   setTimeout(()=>fitView(false), 260);
 };
 
-load();layout(220);buildTypeFilters();render();applySide();
+/* 老数据迁移：把 note 里的 [MM-DD hh:mm] 行变成事件记录 */
+function legacyNoteToEvents(){
+  (state.nodes||[]).forEach(function(n){
+    if(!Array.isArray(n.events)) n.events = [];
+    if(n.note && n.note.trim() && n.events.length === 0){
+      n.note.split("\n").map(function(s){return s.trim();}).filter(Boolean).forEach(function(line){
+        var m = line.match(/^\[(\d{2})-(\d{2}) (\d{2}):(\d{2})\]\s*(.*)$/);
+        if(m){
+          var now = new Date();
+          var at = new Date(now.getFullYear(), +m[1]-1, +m[2], +m[3], +m[4]).getTime();
+          n.events.push({ at: at, text: m[5] });
+        } else {
+          n.events.push({ at: 0, text: line });
+        }
+      });
+      n.note = "";
+    }
+  });
+}
+
+load();legacyNoteToEvents();layout(220);buildTypeFilters();render();applySide();
 let rzT=null;
 window.addEventListener("resize",()=>{ clearTimeout(rzT); rzT=setTimeout(fitView,180); });
 </script>
