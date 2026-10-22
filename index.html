@@ -338,9 +338,11 @@ function dialogForm(title, desc, rows, values, onSubmit, onDelete){
   const box = $("bForm"); box.style.display = "block";
   box.innerHTML = rows.map(r => {
     const v = esc((values && values[r.k]) || "");
-    const field = r.type === "area"
-      ? `<textarea data-f="${r.k}" placeholder="${esc(r.ph||"")}" style="min-height:64px">${v}</textarea>`
-      : `<input type="text" data-f="${r.k}" placeholder="${esc(r.ph||"")}" value="${v}">`;
+    let field;
+    if(r.type === "area") field = `<textarea data-f="${r.k}" placeholder="${esc(r.ph||"")}" style="min-height:64px">${v}</textarea>`;
+    else if(r.type === "select") field = `<select data-f="${r.k}" style="width:100%">${(r.opts||[]).map(o =>
+      `<option${o === ((values && values[r.k]) || "") ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
+    else field = `<input type="text" data-f="${r.k}" placeholder="${esc(r.ph||"")}" value="${v}">`;
     return `<div class="f" style="align-items:flex-start"><label>${esc(r.label)}</label>${field}</div>`;
   }).join("");
   const del = $("bDel");
@@ -735,11 +737,22 @@ function drawRight(){
   $("rAdd").onclick = addRel;
   ["rTo","rEv","rNote"].forEach(id => $(id).addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); addRel(); } }));
   box.querySelectorAll("[data-rel]").forEach(el => el.onclick = () => {
-    const id = el.dataset.rel, e0 = d.edges.find(x => x.id === id);
-    dialog("text", "删除这条关系？", `${e0.type}｜强度 ${e0.strength}`, "输入 yes 确认", "", v => {
-      if((v||"").trim().toLowerCase() !== "yes") return;
-      d.edges = d.edges.filter(x => x.id !== id); save(); draw();
-    });
+    const id = el.dataset.rel, e0 = d.edges.find(x => x.id === id); if(!e0) return;
+    const other = d.nodes.find(x => x.id === (e0.from === n.id ? e0.to : e0.from));
+    dialogForm("编辑关系", `与「${other ? other.name : "?"}」的关系`,
+      [{k:"type",label:"类型",type:"select",opts:RELS},
+       {k:"strength",label:"强度",ph:"1-5"},
+       {k:"evidence",label:"证据",ph:"E-003（可空）"},
+       {k:"note",label:"备注",ph:"依据 / 怎么认识"}],
+      { type:e0.type, strength:String(e0.strength||3), evidence:e0.evidence||"", note:e0.note||"" },
+      v => {
+        e0.type = v.type || e0.type;
+        e0.strength = Math.min(5, Math.max(1, parseInt(v.strength,10) || 3));
+        e0.evidence = (v.evidence||"").trim();
+        e0.note = (v.note||"").trim();
+        save(); draw(); toast("关系已更新");
+      },
+      () => { d.edges = d.edges.filter(x => x.id !== id); save(); draw(); toast("已删除关系"); });
   });
   $("nDel").onclick = () => dialog("text", "删除这个实体？", "相连的关系会一起删除。", "输入 yes 确认", "", v => {
     if((v||"").trim().toLowerCase() !== "yes") return;
