@@ -169,6 +169,7 @@ textarea{resize:vertical;min-height:66px}
       <input id="search" placeholder="搜索人名 / 标签">
       <div class="rightGroup">
       <button class="btn" id="exportMd" title="导出 Markdown 报告">报告</button>
+      <button class="btn" id="exportSJ" title="导出给 SJ Lens 的关系摘要">手机</button>
       <button class="btn icon" id="exportBtn" title="导出 JSON"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M5 19h14"/></svg></button>
       <button class="btn icon" id="importBtn" title="导入 JSON"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="M7.5 8.5 12 4l4.5 4.5"/><path d="M5 19h14"/></svg></button>
       <button class="btn primary" id="fitBtn">整理</button>
@@ -924,6 +925,38 @@ document.getElementById("exportMd").onclick = ()=>{
   a.download = `guangxiw-${safe}-${now.toISOString().slice(0,10)}.md`;
   a.click(); URL.revokeObjectURL(a.href);
   toast("已导出 Markdown 报告");
+};
+
+
+/* ---------- 导出给 SJ Lens 的关系摘要 ---------- */
+document.getElementById("exportSJ").onclick = ()=>{
+  const d = data();
+  const persons = [];
+  d.nodes.filter(n=>n.type === "person").forEach(n=>{
+    const rels = [];
+    d.edges.forEach(e=>{
+      let otherId = null;
+      if(e.from === n.id) otherId = e.to;
+      else if(e.to === n.id) otherId = e.from;
+      if(!otherId) return;
+      const o = d.nodes.find(x=>x.id === otherId);
+      if(!o) return;
+      rels.push({ to: o.name, toType: TYPE_LABEL[o.type] || o.type,
+                  type: e.type, strength: e.strength || 3,
+                  evidence: e.evidence || "", note: e.note || "" });
+    });
+    if(rels.length) persons.push({ name: n.name, relations: rels });
+  });
+  if(!persons.length) return toast("还没有可导出的关系");
+  const payload = { kind: "guangxiw.relations", version: 1, folder: d.name,
+                    generatedAt: Date.now(), persons };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  const safe = (d.name || "folder").replace(/[\\/:*?"<>|]/g, "_");
+  a.download = `guangxiw-relations-${safe}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+  toast(`已导出 ${persons.length} 个人的关系摘要`);
 };
 
 load();legacyNoteToEvents();layout(220);buildTypeFilters();render();applySide();
