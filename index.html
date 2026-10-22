@@ -63,10 +63,19 @@ svg.dragging{cursor:grabbing}
 
 #leftPane{border-right:1px solid var(--line);background:var(--panel);display:flex;
   flex-direction:column;overflow:hidden;min-width:0}
-#leftPane .ph{display:flex;align-items:center;gap:8px;padding:11px 13px;border-bottom:1px solid var(--line);
+#leftPane .ph{display:flex;flex-wrap:nowrap;white-space:nowrap;align-items:center;gap:6px;padding:11px 13px;border-bottom:1px solid var(--line);
   font-size:11px;color:var(--muted);letter-spacing:.12em}
 #leftPane .ph b{margin-left:auto;font-weight:500;color:var(--dim);letter-spacing:0}
-#typeFilters{display:flex;flex-wrap:wrap;gap:5px;padding:10px 11px 4px}
+.tab{cursor:pointer;padding:2px 6px;border-radius:6px;letter-spacing:.06em;transition:.15s;white-space:nowrap;flex:none}
+  .tab.on{color:var(--brass);background:rgba(200,169,106,.12)}
+  #timeline{display:none;flex:1;overflow:auto;padding:6px 10px 16px}
+  #timeline.on{display:block}
+  .evDay{font-size:11px;color:var(--dim);letter-spacing:.1em;margin:12px 2px 6px}
+  .evItem{display:flex;gap:8px;padding:6px 6px;border-radius:8px;cursor:pointer;font-size:13px;line-height:1.6}
+  .evItem:hover{background:#1b2028}
+  .evItem .tm{color:var(--brass);flex:none;font-size:11.5px}
+  .evItem .who{color:var(--muted);flex:none}
+  #typeFilters{display:flex;flex-wrap:wrap;gap:5px;padding:10px 11px 4px}
 #entityList{flex:1;overflow:auto;padding:4px 8px 16px}
 .erow{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;cursor:pointer;
   transition:.14s;font-size:13.5px}
@@ -125,12 +134,13 @@ textarea{resize:vertical;min-height:66px}
 <body>
 <div id="app">
   <aside id="leftPane">
-    <div class="ph">实体 <b id="countLbl"></b>
+    <div class="ph"><span id="tabEntity" class="tab on">实体</span><span id="tabTimeline" class="tab">时间线</span> <b id="countLbl"></b>
       <select id="layoutSel" style="width:96px;height:24px;font-size:11.5px;padding:0 6px;margin-left:6px">
         <option value="force">力导向</option><option value="circle">环形</option><option value="degree">按连接数</option>
       </select></div>
     <div id="typeFilters"></div>
     <div id="entityList"></div>
+    <div id="timeline"></div>
   </aside>
   <div id="canvasWrap">
     <svg id="svg"><g id="viewport"><g id="edges"></g><g id="nodes"></g></g></svg>
@@ -158,6 +168,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="btn" id="caseAdd">+ 文件夹</button>
       <input id="search" placeholder="搜索人名 / 标签">
       <div class="rightGroup">
+      <button class="btn" id="exportMd" title="导出 Markdown 报告">报告</button>
       <button class="btn icon" id="exportBtn" title="导出 JSON"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M5 19h14"/></svg></button>
       <button class="btn icon" id="importBtn" title="导入 JSON"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="M7.5 8.5 12 4l4.5 4.5"/><path d="M5 19h14"/></svg></button>
       <button class="btn primary" id="fitBtn">整理</button>
@@ -399,6 +410,7 @@ function render(){
   applyView();
   renderPanel();
   renderEntityList();
+  if(leftTab === 'timeline') renderTimeline();
 }
 
 /* 侧栏 */
@@ -829,6 +841,90 @@ function legacyNoteToEvents(){
     }
   });
 }
+
+
+/* ---------- 时间线视图 ---------- */
+let leftTab = "entity";
+function renderTimeline(){
+  const box = document.getElementById("timeline");
+  const rows = [];
+  (state.nodes||[]).forEach(n=>(n.events||[]).forEach(e=>rows.push({at:e.at, text:e.text, who:n.name, id:n.id})));
+  if(!rows.length){ box.innerHTML = '<div style="font-size:12.5px;color:var(--dim);padding:12px">还没有任何记录。</div>'; return; }
+  rows.sort((a,b)=>(b.at||0)-(a.at||0));
+  let html = "", lastDay = "";
+  rows.forEach(r=>{
+    const day = r.at ? fmtTime(r.at).slice(0,5) : "未标注时间";
+    if(day !== lastDay){ html += `<div class="evDay">${day}</div>`; lastDay = day; }
+    const t = r.at ? fmtTime(r.at).slice(6) : "--:--";
+    html += `<div class="evItem" data-ev-id="${r.id||""}">
+      <span class="tm">${t}</span><span class="who">${esc(r.who)}</span>
+      <span style="flex:1;min-width:0">${esc(r.text)}</span></div>`;
+  });
+  box.innerHTML = html;
+  box.querySelectorAll("[data-ev-id]").forEach(el=>el.onclick=()=>{
+    if(!el.dataset.evId) return;
+    selectedId = el.dataset.evId; render();
+    const n = state.nodes.find(x=>x.id===selectedId);
+    if(n){ view.x = -n.x*view.k; view.y = -n.y*view.k; applyView(); }
+  });
+}
+function setLeftTab(tab){
+  leftTab = tab;
+  document.getElementById("tabEntity").classList.toggle("on", tab==="entity");
+  document.getElementById("tabTimeline").classList.toggle("on", tab==="timeline");
+  document.getElementById("entityList").style.display = tab==="entity" ? "" : "none";
+  document.getElementById("typeFilters").style.display = tab==="entity" ? "" : "none";
+  document.getElementById("timeline").classList.toggle("on", tab==="timeline");
+  if(tab==="timeline") renderTimeline();
+}
+document.getElementById("tabEntity").onclick = ()=>setLeftTab("entity");
+document.getElementById("tabTimeline").onclick = ()=>setLeftTab("timeline");
+
+/* ---------- 导出 Markdown 报告 ---------- */
+document.getElementById("exportMd").onclick = ()=>{
+  const d = data();
+  const deg = {}; d.edges.forEach(e=>{ deg[e.from]=(deg[e.from]||0)+1; deg[e.to]=(deg[e.to]||0)+1; });
+  const now = new Date();
+  const L = [];
+  L.push(`# ${d.name} · 关系网梳理`);
+  L.push("");
+  L.push(`导出时间：${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")} ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`);
+  L.push(`实体 ${d.nodes.length} 个 · 关系 ${d.edges.length} 条`);
+  L.push("");
+  L.push("## 实体");
+  L.push("");
+  L.push("| 名称 | 类型 | 标签 | 连接数 | 已记录 |");
+  L.push("|---|---|---|---|---|");
+  [...d.nodes].sort((a,b)=>(deg[b.id]||0)-(deg[a.id]||0)).forEach(n=>{
+    L.push(`| ${n.name} | ${TYPE_LABEL[n.type]||n.type} | ${(n.tags||[]).join("、")||"—"} | ${deg[n.id]||0} | ${(n.events||[]).length} |`);
+  });
+  L.push("");
+  L.push("## 关系");
+  L.push("");
+  L.push("| A | 关系 | B | 强度 | 证据 | 备注 |");
+  L.push("|---|---|---|---|---|---|");
+  d.edges.forEach(e=>{
+    const a = d.nodes.find(x=>x.id===e.from), b = d.nodes.find(x=>x.id===e.to);
+    L.push(`| ${a?a.name:"?"} | ${e.type} | ${b?b.name:"?"} | ${e.strength||3} | ${e.evidence||"—"} | ${(e.note||"—").replace(/\|/g,"/")} |`);
+  });
+  L.push("");
+  L.push("## 记录");
+  L.push("");
+  d.nodes.forEach(n=>{
+    const evs = (n.events||[]).slice().sort((a,b)=>(a.at||0)-(b.at||0));
+    if(!evs.length) return;
+    L.push(`### ${n.name}`);
+    evs.forEach(e=>L.push(`- ${e.at?fmtTime(e.at):"未标注"}  ${e.text}`));
+    L.push("");
+  });
+  const blob = new Blob([L.join("\n")], {type:"text/markdown;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  const safe = (d.name||"folder").replace(/[\\/:*?"<>|]/g,"_");
+  a.download = `guangxiw-${safe}-${now.toISOString().slice(0,10)}.md`;
+  a.click(); URL.revokeObjectURL(a.href);
+  toast("已导出 Markdown 报告");
+};
 
 load();legacyNoteToEvents();layout(220);buildTypeFilters();render();applySide();
 let rzT=null;
