@@ -145,7 +145,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
   display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--brass);
   border:1px solid var(--hair2)}
 .avatar img{width:100%;height:100%;object-fit:cover}
-.kv{display:flex;align-items:center;gap:6px;font-size:12.5px;padding:5px 6px;border-radius:5px}
+.kv{display:flex;align-items:center;gap:6px;font-size:12.5px;padding:5px 6px;border-radius:5px;cursor:pointer}
 .kv:hover{background:var(--raise)}
 .kv .k{color:var(--fg3);min-width:52px}
 .kv .v{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -166,6 +166,8 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
 #box h4{margin:0 0 5px;font-size:15.5px;font-weight:600}
 #box p{margin:0 0 13px;font-size:12.5px;color:var(--fg2);line-height:1.7}
 #box .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:15px}
+#bForm .f{margin-bottom:8px}
+#bForm .f>label{width:38px}
 #toast{position:fixed;left:50%;bottom:76px;transform:translateX(-50%) translateY(8px);z-index:70;
   background:var(--raise2);border:1px solid var(--brass);border-radius:7px;padding:8px 14px;
   font-size:12.5px;opacity:0;transition:.2s;pointer-events:none}
@@ -224,8 +226,9 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
 
   <div id="veil"><div id="box">
     <h4 id="bTitle"></h4><p id="bDesc"></p>
-    <input type="text" id="bInput"><textarea id="bArea"></textarea>
-    <div class="acts"><button class="bt" id="bCancel">取消</button><button class="bt solid" id="bOk">确定</button></div>
+    <input type="text" id="bInput"><textarea id="bArea"></textarea><div id="bForm"></div>
+    <div class="acts"><button class="bt danger" id="bDel" style="margin-right:auto;display:none">删除</button>
+      <button class="bt" id="bCancel">取消</button><button class="bt solid" id="bOk">保存</button></div>
   </div></div>
   <div id="toast"></div>
 </div>
@@ -312,14 +315,40 @@ function dialog(mode, title, desc, ph, val, cb){
   else { $("bInput").value = val || ""; $("bInput").placeholder = ph || ""; setTimeout(()=>$("bInput").focus(),50); }
   $("veil").classList.add("on");
 }
-function closeDlg(){ $("veil").classList.remove("on"); dlgCb = null; }
+function closeDlg(){ $("veil").classList.remove("on"); dlgCb = null; formCb = null; formDel = null;
+  $("bForm").style.display = "none"; $("bForm").innerHTML = ""; }
 $("bCancel").onclick = closeDlg;
 $("bOk").onclick = () => {
+  if(dlgMode === "form"){
+    const out = {};
+    $("bForm").querySelectorAll("[data-f]").forEach(el => { out[el.dataset.f] = el.value; });
+    const cb = formCb; closeDlg(); if(cb) cb(out);
+    return;
+  }
   const v = dlgMode === "area" ? $("bArea").value : $("bInput").value;
   const cb = dlgCb; closeDlg(); if(cb) cb(v);
 };
 $("bInput").addEventListener("keydown", e => { if(e.key === "Enter") $("bOk").click(); });
 $("veil").addEventListener("click", e => { if(e.target.id === "veil") closeDlg(); });
+let formCb = null, formDel = null;
+function dialogForm(title, desc, rows, values, onSubmit, onDelete){
+  dlgMode = "form"; formCb = onSubmit; formDel = onDelete || null;
+  $("bTitle").textContent = title; $("bDesc").textContent = desc || "";
+  $("bInput").style.display = "none"; $("bArea").style.display = "none";
+  const box = $("bForm"); box.style.display = "block";
+  box.innerHTML = rows.map(r => {
+    const v = esc((values && values[r.k]) || "");
+    const field = r.type === "area"
+      ? `<textarea data-f="${r.k}" placeholder="${esc(r.ph||"")}" style="min-height:64px">${v}</textarea>`
+      : `<input type="text" data-f="${r.k}" placeholder="${esc(r.ph||"")}" value="${v}">`;
+    return `<div class="f" style="align-items:flex-start"><label>${esc(r.label)}</label>${field}</div>`;
+  }).join("");
+  const del = $("bDel");
+  del.style.display = onDelete ? "inline-flex" : "none";
+  del.onclick = () => { const f = formDel; closeDlg(); if(f) f(); };
+  $("veil").classList.add("on");
+  setTimeout(()=>{ const first = box.querySelector("input,textarea"); if(first) first.focus(); }, 50);
+}
 let toastT = null;
 function toast(msg){
   const el = $("toast"); el.textContent = msg; el.classList.add("on");
@@ -652,27 +681,42 @@ function drawRight(){
   $("evAdd").onclick = addEv;
   $("evIn").addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); addEv(); } });
   box.querySelectorAll("[data-acc]").forEach(el => el.onclick = () => {
-    const i = +el.dataset.acc;
-    dialog("text", "删除这个账号？", `${(n.accounts[i]||{}).platform || ""} ${(n.accounts[i]||{}).handle || ""}`, "输入 yes 确认", "", v => {
-      if((v||"").trim().toLowerCase() !== "yes") return;
-      n.accounts.splice(i,1); save(); draw();
-    });
+    const i = +el.dataset.acc, a = n.accounts[i]; if(!a) return;
+    dialogForm("编辑账号", "改完点保存；不需要了可以直接删除。",
+      [{k:"platform",label:"平台",ph:"抖音 / 快手 / B站…"},{k:"handle",label:"账号",ph:"昵称或 ID"},
+       {k:"note",label:"备注",ph:"比如：小号 / 已注销"}],
+      { platform:a.platform, handle:a.handle, note:a.note },
+      v => {
+        if(!(v.handle||"").trim()) return toast("账号不能为空");
+        n.accounts[i] = { platform:(v.platform||"").trim() || "其他", handle:v.handle.trim(), note:(v.note||"").trim() };
+        save(); draw(); toast("已保存");
+      },
+      () => { n.accounts.splice(i,1); save(); draw(); toast("已删除"); });
   });
   box.querySelectorAll("[data-attr]").forEach(el => el.onclick = () => {
-    const i = +el.dataset.attr;
-    dialog("text", "删除这条信息？", `${(n.attrs[i]||{}).k}：${(n.attrs[i]||{}).v}`, "输入 yes 确认", "", v => {
-      if((v||"").trim().toLowerCase() !== "yes") return;
-      n.attrs.splice(i,1); save(); draw();
-    });
+    const i = +el.dataset.attr, a = n.attrs[i]; if(!a) return;
+    dialogForm("编辑信息", "键值对，比如 常去 / 喜好 / 车牌。",
+      [{k:"k",label:"项目",ph:"常去"},{k:"v",label:"内容",ph:"XX 健身房"}],
+      { k:a.k, v:a.v },
+      x => {
+        if(!(x.k||"").trim() || !(x.v||"").trim()) return toast("项目和内容都要填");
+        n.attrs[i] = { k:x.k.trim(), v:x.v.trim() };
+        save(); draw(); toast("已保存");
+      },
+      () => { n.attrs.splice(i,1); save(); draw(); toast("已删除"); });
   });
   box.querySelectorAll("[data-evrow]").forEach(el => el.onclick = () => {
     const i = +el.dataset.evrow;
     const sorted = (n.events||[]).slice().sort((a,b)=>(b.at||0)-(a.at||0));
     const item = sorted[i]; if(!item) return;
-    dialog("text", "删除这条记录？", item.text, "输入 yes 确认", "", v => {
-      if((v||"").trim().toLowerCase() !== "yes") return;
-      n.events = n.events.filter(x => x !== item); save(); draw();
-    });
+    dialogForm("编辑记录", "时间：" + fmt(item.at) + "（时间不改，只改内容）",
+      [{k:"text",label:"内容",type:"area",ph:"这条线索是什么"}],
+      { text:item.text },
+      x => {
+        if(!(x.text||"").trim()) return toast("内容不能为空");
+        item.text = x.text.trim(); save(); draw(); toast("已保存");
+      },
+      () => { n.events = n.events.filter(y => y !== item); save(); draw(); toast("已删除"); });
   });
   let busy = false;
   const addRel = () => {
@@ -1042,6 +1086,4 @@ layout("force");
 draw();
 center(true);
 window.addEventListener("resize", () => { applyView(); });
-</script>
-</body>
-</html>
+
