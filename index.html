@@ -337,6 +337,7 @@ document.getElementById("mOk").onclick=()=>{const v=document.getElementById("mIn
 document.getElementById("mInput").addEventListener("keydown",e=>{if(e.key==="Enter")document.getElementById("mOk").click();});
 document.getElementById("overlay").addEventListener("click",e=>{if(e.target.id==="overlay")closeModal();});
 const uiPrompt=(t,d,p,v,cb)=>openModal("prompt",t,d,p,v,cb);
+const ask=uiPrompt;
 const uiConfirm=(t,d,cb)=>openModal("confirm",t,d,"","",()=>cb());
 function toast(m){const el=document.getElementById("toast");el.textContent=m;el.classList.add("on");
   clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove("on"),3000);}
@@ -1004,11 +1005,11 @@ document.getElementById("exportSJ").onclick = ()=>{
 function clearPath(){ pathSet = { nodes:new Set(), edges:new Set() }; render(); }
 document.getElementById("pathBtn").onclick = ()=>{
   const names = state.nodes.map(n=>n.name).join("、");
-  ask("最短关系链 · 起点", "填一个名字，下面会接着问终点。现有：" + names.slice(0, 60), "起点名字", "", a=>{
+  uiPrompt("最短关系链 · 起点", "填一个名字，下面会接着问终点。现有：" + names.slice(0, 60), "起点名字", "", a=>{
     if(!a) return;
     const from = state.nodes.find(n=>n.name === a.trim());
     if(!from) return toast("没有这个实体：" + a);
-    ask("最短关系链 · 终点", "从「" + from.name + "」出发，要连到谁？", "终点名字", "", b=>{
+    uiPrompt("最短关系链 · 终点", "从「" + from.name + "」出发，要连到谁？", "终点名字", "", b=>{
       if(!b) return;
       const to = state.nodes.find(n=>n.name === b.trim());
       if(!to) return toast("没有这个实体：" + b);
