@@ -1,0 +1,11 @@
+# 临时产物
+_*.png
+*.tmp
+_tmp/
+.vscode/
+.DS_Store
+
+# 用户导出的数据
+guangxiw-*.json
+guangxiw-*.md
+!sample-relations.json
