@@ -713,9 +713,14 @@ svg.addEventListener("pointerdown", e => {
   if(el){
     const n = data().nodes.find(x => x.id === el.dataset.n);
     const p = toWorld(e.clientX, e.clientY);
-    drag = { id:n.id, dx:p.x - n.x, dy:p.y - n.y };
     selected = n.id; svg.setPointerCapture(e.pointerId);
     draw(); openDrawer("right");
+    // 注意：必须在 draw() 之后取线段元素，否则拿到的是被重绘丢弃的旧节点
+    const linked = data().edges
+      .filter(x => x.from === n.id || x.to === n.id)
+      .map(x => ({ e:x, el:gE.querySelector(`[data-e="${x.id}"]`) }))
+      .filter(x => x.el);
+    drag = { id:n.id, dx:p.x - n.x, dy:p.y - n.y, linked };
     return;
   }
   if(selected){
@@ -733,6 +738,12 @@ svg.addEventListener("pointermove", e => {
     n.x = p.x - drag.dx; n.y = p.y - drag.dy;
     const g = gN.querySelector(`[data-n="${drag.id}"]`);
     if(g) g.setAttribute("transform", `translate(${n.x},${n.y})`);
+    // 连线跟着动，不然要等松手才更新
+    (drag.linked || []).forEach(function(item){
+      const e = item.e, el = item.el;
+      if(e.from === drag.id){ el.setAttribute("x1", n.x); el.setAttribute("y1", n.y); }
+      else { el.setAttribute("x2", n.x); el.setAttribute("y2", n.y); }
+    });
     return;
   }
   if(pan){
