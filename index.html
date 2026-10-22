@@ -597,8 +597,12 @@ function drawRight(){
         ${n.avatar ? `<button class="bt" id="avDel">移除</button>` : ""}
       </div>
       <div class="f"><label>名字</label><input type="text" id="nName" value="${esc(n.name)}"></div>
-      <div class="f"><label>类型</label><input type="text" id="nType" list="typeList" value="${esc(TYPE_LABEL[n.type] || n.type)}">
-        <datalist id="typeList">${TYPES.map(([v,l])=>`<option value="${l}">`).join("")}</datalist></div>
+      <div class="f"><label>类型</label><select id="nType" style="width:100%">${(() => {
+        const cur = TYPE_LABEL[n.type] || n.type;
+        const opts = TYPES.map(([v,l]) => l);
+        if(!opts.includes(cur)) opts.push(cur);   // 自定义类型原样保留，避免保存时被改掉
+        return opts.map(l => `<option${l === cur ? " selected" : ""}>${esc(l)}</option>`).join("");
+      })()}</select></div>
       <div class="f"><label>标签</label><input type="text" id="nTags" value="${esc((n.tags||[]).join(","))}" placeholder="逗号分隔"></div>
       <button class="bt solid wide" id="nSave">保存</button>
     </div>
@@ -627,8 +631,10 @@ function drawRight(){
     </div>
 
     <div class="sec"><h5>建立关系</h5>
-      <div class="f"><label>对方</label><input type="text" id="rTo" list="peerList" placeholder="名字，不存在会新建">
-        <datalist id="peerList">${d.nodes.filter(x=>x.id!==n.id).map(x=>`<option value="${esc(x.name)}">`).join("")}</datalist></div>
+      <div class="f"><label>对方</label><input type="text" id="rTo" placeholder="名字，不存在会新建"></div>
+      ${d.nodes.filter(x=>x.id!==n.id).length ? `<div class="chips" id="peerChips">${
+        d.nodes.filter(x=>x.id!==n.id).slice(0,8).map(x =>
+          `<span class="chip" data-peer="${esc(x.name)}">${esc(x.name)}</span>`).join("")}</div>` : ""}
       <div class="f"><label>类型</label><select id="rType" style="width:100%">${RELS.map(r=>`<option>${r}</option>`).join("")}</select></div>
       <div class="chips" id="rChips">${[1,2,3,4,5].map(s=>`<span class="chip${s===3?" on":""}" data-s="${s}">强度 ${s}</span>`).join("")}</div>
       <div class="f"><label>证据</label><input type="text" id="rEv" placeholder="E-003（可空）"></div>
@@ -648,6 +654,11 @@ function drawRight(){
 
     <button class="bt danger wide" id="nDel">删除这个实体</button>`;
 
+  const peerBox = box.querySelector("#peerChips");
+  if(peerBox) peerBox.querySelectorAll("[data-peer]").forEach(ch => ch.onclick = () => {
+    $("rTo").value = ch.dataset.peer;
+    peerBox.querySelectorAll("[data-peer]").forEach(x => x.classList.toggle("on", x === ch));
+  });
   let strength = 3;
   box.querySelectorAll("#rChips .chip").forEach(c => c.onclick = () => {
     strength = +c.dataset.s;
