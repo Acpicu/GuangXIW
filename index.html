@@ -137,12 +137,14 @@ textarea{resize:vertical;min-height:66px}
     #app.sideHidden{grid-template-rows:1fr 0px}
     #side{width:100%;border-left:0;border-top:1px solid var(--line)}
   }
-#canvasWrap > .edgeBtn{position:absolute;top:58px;z-index:9;width:34px;height:28px;
-    padding:0;background:rgba(19,22,27,.94);border:1px solid var(--line2);font-size:13px;
-    display:flex;align-items:center;justify-content:center}
-  #canvasWrap > .edgeBtn.right{right:10px}
-  #canvasWrap > .edgeBtn:not(.right){left:10px}
-  #canvasWrap > .edgeBtn:hover{border-color:var(--brass2);color:var(--brass)}
+#canvasWrap > .edgeTab{position:fixed;top:50%;transform:translateY(-50%);z-index:40;
+    width:18px;height:52px;padding:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(19,22,27,.94);border:1px solid var(--line2);color:var(--muted);
+    cursor:pointer;transition:.16s}
+  #canvasWrap > .edgeTab:not(.right){left:0;border-left:0;border-radius:0 8px 8px 0}
+  #canvasWrap > .edgeTab.right{right:0;border-right:0;border-radius:8px 0 0 8px}
+  #canvasWrap > .edgeTab:hover{color:var(--brass);border-color:var(--brass2);background:#1d222a}
+  #canvasWrap > .edgeTab svg{width:13px;height:13px;opacity:.9}
 </style>
 </head>
 <body>
@@ -159,8 +161,16 @@ textarea{resize:vertical;min-height:66px}
   </aside>
   <div id="canvasWrap">
     <svg id="svg"><g id="viewport"><g id="edges"></g><g id="nodes"></g></g></svg>
-    <button class="btn ghost edgeBtn" id="toggleLeft" title="显示/隐藏实体列表">☰</button>
-    <button class="btn ghost edgeBtn right" id="toggleSide" title="显示/隐藏检查器 (Ctrl+B)">▤</button>
+    <button class="edgeTab" id="toggleLeft" title="显示/隐藏实体列表">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M15 6 9 12l6 6"/><path d="M19 5v14"/>
+      </svg>
+    </button>
+    <button class="edgeTab right" id="toggleSide" title="显示/隐藏检查器 (Ctrl+B)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M9 6l6 6-6 6"/><path d="M5 5v14"/>
+      </svg>
+    </button>
     <div id="topbar">
       <div class="brandWrap">
       <svg id="appIcon" width="20" height="20" viewBox="0 0 256 256" aria-hidden="true">
@@ -323,7 +333,7 @@ function applySide(){
   const hidden = window.__sideHidden === true;
   document.getElementById("app").classList.toggle("sideHidden", hidden);
   const b = document.getElementById("toggleSide");
-  if(b){ b.textContent = "▤"; b.title = hidden ? "展开检查器 (Ctrl+B)" : "收起检查器 (Ctrl+B)"; }
+  if(b) b.title = hidden ? "展开检查器 (Ctrl+B)" : "收起检查器 (Ctrl+B)";
 }
 function toggleSide(){
   const hidden = window.__sideHidden === true;
