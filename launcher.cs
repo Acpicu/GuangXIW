@@ -83,44 +83,6 @@ static class Launcher
 
 static class AdbPush
 {
-    /// 把导出目录里最新的 guangxiw-relations-*.json 推到手机 /sdcard/Download。
-    public static string PushLatest()
-    {
-        try
-        {
-            string dl = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-            if (!Directory.Exists(dl)) return "找不到下载目录";
-            var files = Directory.GetFiles(dl, "guangxiw-relations-*.json");
-            if (files.Length == 0) return "没找到关系摘要，先点「导出 → 给 SJ Lens（手机）」";
-            Array.Sort(files);
-            string newest = files[files.Length - 1];
-
-            string adb = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                @"Android\Sdk\platform-tools\adb.exe");
-            if (!File.Exists(adb)) adb = "adb";
-
-            var psi = new System.Diagnostics.ProcessStartInfo(adb,
-                "push \"" + newest + "\" /sdcard/Download/")
-            {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-            using (var pr = System.Diagnostics.Process.Start(psi))
-            {
-                string outp = pr.StandardOutput.ReadToEnd() + pr.StandardError.ReadToEnd();
-                pr.WaitForExit(15000);
-                if (pr.ExitCode == 0) return "已推送到手机：" + Path.GetFileName(newest);
-                return "推送失败：" + (outp.Length > 90 ? outp.Substring(0, 90) : outp);
-            }
-        }
-        catch (Exception ex) { return "推送失败：" + ex.Message; }
-    }
-}
-
-static class AdbPush
-{
     static string AdbPath()
     {
         string adb = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
