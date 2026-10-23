@@ -257,6 +257,16 @@ const $ = id => document.getElementById(id);
 const uid = p => p + Math.random().toString(36).slice(2, 8);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const now = () => Date.now();
+const fmtDate = ts => { if(!ts) return "—"; const d = new Date(ts), p = n => String(n).padStart(2,"0");
+  return `${p(d.getMonth()+1)}-${p(d.getDate())}`; };
+const fmtDateInput = ts => { const d = ts ? new Date(ts) : new Date(), p = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; };
+const parseDateInput = s => {
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec((s||"").trim());
+  if(!m) return null;
+  const d = new Date(+m[1], +m[2]-1, +m[3], 12, 0);   // 用中午，避开时区/夏令时边界
+  return isNaN(d.getTime()) ? null : d.getTime();
+};
 const fmt = ts => { if(!ts) return "—"; const d = new Date(ts), p = n => String(n).padStart(2,"0");
   return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
 const data = () => folders.find(f => f.id === curId) || folders[0];
@@ -344,8 +354,8 @@ function dialogForm(title, desc, rows, values, onSubmit, onDelete){
     const v = esc((values && values[r.k]) || "");
     let field;
     if(r.type === "area") field = `<textarea data-f="${r.k}" placeholder="${esc(r.ph||"")}" style="min-height:64px">${v}</textarea>`;
-    else if(r.type === "datetime") field = `<input type="datetime-local" data-f="${r.k}" value="${v}">`;
-    else if(r.type === "datetime") field = `<input type="datetime-local" data-f="${r.k}" value="${v}">`;
+    else if(r.type === "date") field = `<input type="text" data-f="${r.k}" value="${v}" placeholder="2026-10-22" inputmode="numeric">`;
+    else if(r.type === "date") field = `<input type="text" data-f="${r.k}" value="${v}" placeholder="2026-10-22" inputmode="numeric">`;
     else if(r.type === "select") field = `<select data-f="${r.k}" style="width:100%">${(r.opts||[]).map(o =>
       `<option${o === ((values && values[r.k]) || "") ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
     else field = `<input type="text" data-f="${r.k}" placeholder="${esc(r.ph||"")}" value="${v}">`;
@@ -532,9 +542,9 @@ function drawLeft(){
     if(!rows.length){ box.innerHTML = `<div class="empty">还没有任何记录。选中一个人，在详情里记一笔。</div>`; return; }
     let html = "", day = "";
     rows.forEach(r => {
-      const dd = r.at ? fmt(r.at).slice(0,5) : "未标时间";
+      const dd = r.at ? fmtDate(r.at) : "未标日期";
       if(dd !== day){ html += `<div class="evday">${dd}</div>`; day = dd; }
-      html += `<div class="evrow" data-ev="${r.id}"><span class="t">${r.at ? fmt(r.at).slice(6) : "--:--"}</span>
+      html += `<div class="evrow" data-ev="${r.id}"><span class="t">${r.at ? fmtDate(r.at) : "--"}</span>
         <span class="w">${esc(r.who)}</span><span>${esc(r.text)}</span></div>`;
     });
     box.innerHTML = html;
@@ -638,10 +648,11 @@ function drawRight(){
 
     <div class="sec"><h5>记录 <span style="color:var(--fg3)">${(n.events||[]).length}</span></h5>
       <div id="evList">${(n.events||[]).slice().sort((a,b)=>(b.at||0)-(a.at||0)).map((ev,i) =>
-        `<div class="kv" data-evrow="${i}"><span class="k">${fmt(ev.at)}</span><span class="v">${esc(ev.text)}</span></div>`).join("")
+        `<div class="kv" data-evrow="${i}"><span class="k">${fmtDate(ev.at)}</span><span class="v">${esc(ev.text)}</span></div>`).join("")
         || `<div class="empty" style="padding:2px 4px">还没有记录。</div>`}</div>
       <div class="f" style="margin-top:7px"><input type="text" id="evIn" placeholder="这条线索是什么"><button class="bt" id="evAdd">记</button></div>
-      <div class="f"><label>时间</label><input type="datetime-local" id="evAt" title="默认现在，可改成事情发生的时间"></div>
+      <div class="f"><label>日期</label><input type="text" id="evAt" inputmode="numeric"
+        title="默认今天，可改成事情发生的日期，格式 2026-10-22"></div>
     </div>
 
     <div class="sec"><h5>建立关系</h5>
@@ -701,17 +712,20 @@ function drawRight(){
     save(); draw(); toast("已添加");
   };
   const evAt = $("evAt");
-  if(evAt){
-    const d = new Date(), p = x => String(x).padStart(2,"0");
-    evAt.value = `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-  }
+  if(evAt) evAt.value = fmtDateInput(now());
   const addEv = () => {
     const v = ($("evIn").value || "").trim(); if(!v) return;
     let at = now();
-    if(evAt && evAt.value){ const ts = new Date(evAt.value).getTime(); if(!isNaN(ts)) at = ts; }
+    if(evAt && evAt.value.trim()){
+      const ts = parseDateInput(evAt.value);
+      if(ts === null) return toast("日期格式要写成 2026-10-22");
+      at = new Date(ts).getHours() === 12 ? (function(){
+        const d = new Date(ts); d.setHours(new Date().getHours(), new Date().getMinutes()); return d.getTime();
+      })() : ts;
+    }
     n.events = n.events || []; n.events.push({ at, text: v });
     save(); draw();
-    toast(at < now() - 60000 ? "已补录（" + fmt(at) + "）" : "已记录");
+    toast(at < now() - 60000 ? "已补录（" + fmtDate(at) + "）" : "已记录");
   };
   $("evAdd").onclick = addEv;
   $("evIn").addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); addEv(); } });
@@ -744,19 +758,15 @@ function drawRight(){
     const i = +el.dataset.evrow;
     const sorted = (n.events||[]).slice().sort((a,b)=>(b.at||0)-(a.at||0));
     const item = sorted[i]; if(!item) return;
-    const dt = (() => {
-      const d = new Date(item.at || Date.now());
-      const p = n => String(n).padStart(2, "0");
-      return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-    })();
-    dialogForm("编辑记录", "时间可以改：补录昨天的事，就把日期调回去。",
-      [{k:"at",label:"时间",type:"datetime"},
+    dialogForm("编辑记录", "日期可以改：补录昨天的事就写成昨天，格式 2026-10-22。",
+      [{k:"at",label:"日期"},
        {k:"text",label:"内容",type:"area",ph:"这条线索是什么"}],
-      { at:dt, text:item.text },
+      { at:fmtDateInput(item.at), text:item.text },
       x => {
         if(!(x.text||"").trim()) return toast("内容不能为空");
-        const ts = x.at ? new Date(x.at).getTime() : item.at;
-        if(!isNaN(ts)) item.at = ts;
+        const ts = parseDateInput(x.at);
+        if(ts !== null) item.at = ts;
+        else if((x.at||"").trim()) return toast("日期格式要写成 2026-10-22");
         item.text = x.text.trim(); save(); draw(); toast("已保存");
       },
       () => { n.events = n.events.filter(y => y !== item); save(); draw(); toast("已删除"); });
