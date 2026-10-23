@@ -202,7 +202,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
 
   <div id="stage">
     <svg id="g"><g id="vp"><g id="edges"></g><g id="nodes"></g></g></svg>
-    <div id="hint">拖动画布 · 滚轮缩放 · 双击空白新建 · Ctrl+K 详情</div>
+    <div id="hint">拖动画布 · 滚轮缩放 · 双击空白新建 · Shift+拖节点连线 · Ctrl+K 详情</div>
     <div id="capture">
       <input id="capInput" placeholder="速记：选中谁就记到谁名下（回车）">
       <div class="sep"></div>
@@ -249,6 +249,7 @@ const NW = 168, NH = 60;
 let folders = [], curId = null, selected = null;
 let view = {x:0, y:0, k:1}, drag = null, pan = null, hover = null;
 let pathN = new Set(), pathE = new Set();
+let linking = null;   // 正在拖线：{from, x, y}
 let filterType = null, tab = "list";
 
 const $ = id => document.getElementById(id);
@@ -456,6 +457,13 @@ function draw(){
       <title>${esc(a.name)} — ${esc(e.type)} — ${esc(b.name)}｜强度 ${e.strength||3}${e.evidence ? "｜"+esc(e.evidence) : ""}</title></line>`;
   }).join("");
 
+  if(linking){
+    const a = d.nodes.find(n => n.id === linking.from);
+    if(a){
+      gE.innerHTML += `<line id="linkLine" x1="${a.x}" y1="${a.y}" x2="${linking.x}" y2="${linking.y}"
+        stroke="#c8a96a" stroke-width="2" stroke-dasharray="6 5" opacity=".9"/>`;
+    }
+  }
   gN.innerHTML = d.nodes.map(n => {
     if(filterType && n.type !== filterType) return "";
     const hit = q && (n.name.toLowerCase().includes(q) || (n.tags||[]).join(",").toLowerCase().includes(q));
@@ -799,6 +807,15 @@ svg.addEventListener("contextmenu", e => e.preventDefault());
 svg.addEventListener("pointerdown", e => {
   e.preventDefault();
   const el = e.target.closest("[data-n]");
+  // Shift + 拖节点 = 拉一条线到另一个节点上建立关系
+  if(el && e.shiftKey){
+    const n = data().nodes.find(x => x.id === el.dataset.n);
+    const p0 = toWorld(e.clientX, e.clientY);
+    linking = { from:n.id, x:p0.x, y:p0.y };
+    svg.setPointerCapture(e.pointerId);
+    draw();
+    return;
+  }
   if(el){
     const n = data().nodes.find(x => x.id === el.dataset.n);
     const p = toWorld(e.clientX, e.clientY);
@@ -821,6 +838,17 @@ svg.addEventListener("pointerdown", e => {
   svg.setPointerCapture(e.pointerId);
 });
 svg.addEventListener("pointermove", e => {
+  if(linking){
+    const p = toWorld(e.clientX, e.clientY);
+    linking.x = p.x; linking.y = p.y;
+    const tmp = gN.querySelector("#linkLine");
+    if(tmp){
+      const a = data().nodes.find(n => n.id === linking.from);
+      tmp.setAttribute("x1", a ? a.x : 0); tmp.setAttribute("y1", a ? a.y : 0);
+      tmp.setAttribute("x2", p.x); tmp.setAttribute("y2", p.y);
+    }
+    return;
+  }
   if(drag){
     const n = data().nodes.find(x => x.id === drag.id); if(!n) return;
     const p = toWorld(e.clientX, e.clientY);
@@ -845,7 +873,35 @@ svg.addEventListener("pointermove", e => {
   const id = el ? el.dataset.n : null;
   if(id !== hover){ hover = id; draw(); }
 });
-svg.addEventListener("pointerup", () => {
+svg.addEventListener("pointerup", e => {
+  if(linking){
+    const target = document.elementFromPoint(e.clientX, e.clientY);
+    const hit = target && target.closest("[data-n]");
+    const from = linking.from;
+    linking = null;
+    if(hit && hit.dataset.n && hit.dataset.n !== from){
+      const d = data();
+      const a = d.nodes.find(n => n.id === from), b = d.nodes.find(n => n.id === hit.dataset.n);
+      if(a && b){
+        const dup = d.edges.find(x => (x.from === a.id && x.to === b.id) || (x.from === b.id && x.to === a.id));
+        if(dup){ toast("这两个人已经有关系了"); }
+        else{
+          dialogForm("建立关系", a.name + "  →  " + b.name,
+            [{k:"type",label:"类型",type:"select",opts:RELS},
+             {k:"strength",label:"强度",ph:"1-5"},
+             {k:"evidence",label:"证据",ph:"E-003（可空）"}],
+            { type:"其他", strength:"3", evidence:"" },
+            v => {
+              d.edges.push(mkEdge(a.id, b.id, v.type || "其他",
+                Math.min(5, Math.max(1, parseInt(v.strength,10) || 3)), "", (v.evidence||"").trim()));
+              save(); draw(); toast("已连线");
+            });
+        }
+      }
+    }
+    draw();
+    return;
+  }
   if(drag){ save(); drag = null; }
   pan = null; svg.classList.remove("pan");
 });
