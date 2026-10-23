@@ -340,6 +340,8 @@ function dialogForm(title, desc, rows, values, onSubmit, onDelete){
     const v = esc((values && values[r.k]) || "");
     let field;
     if(r.type === "area") field = `<textarea data-f="${r.k}" placeholder="${esc(r.ph||"")}" style="min-height:64px">${v}</textarea>`;
+    else if(r.type === "datetime") field = `<input type="datetime-local" data-f="${r.k}" value="${v}">`;
+    else if(r.type === "datetime") field = `<input type="datetime-local" data-f="${r.k}" value="${v}">`;
     else if(r.type === "select") field = `<select data-f="${r.k}" style="width:100%">${(r.opts||[]).map(o =>
       `<option${o === ((values && values[r.k]) || "") ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
     else field = `<input type="text" data-f="${r.k}" placeholder="${esc(r.ph||"")}" value="${v}">`;
@@ -628,6 +630,7 @@ function drawRight(){
         `<div class="kv" data-evrow="${i}"><span class="k">${fmt(ev.at)}</span><span class="v">${esc(ev.text)}</span></div>`).join("")
         || `<div class="empty" style="padding:2px 4px">还没有记录。</div>`}</div>
       <div class="f" style="margin-top:7px"><input type="text" id="evIn" placeholder="这条线索是什么"><button class="bt" id="evAdd">记</button></div>
+      <div class="f"><label>时间</label><input type="datetime-local" id="evAt" title="默认现在，可改成事情发生的时间"></div>
     </div>
 
     <div class="sec"><h5>建立关系</h5>
@@ -686,10 +689,18 @@ function drawRight(){
     n.attrs = n.attrs || []; n.attrs.push({ k, v });
     save(); draw(); toast("已添加");
   };
+  const evAt = $("evAt");
+  if(evAt){
+    const d = new Date(), p = x => String(x).padStart(2,"0");
+    evAt.value = `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
   const addEv = () => {
     const v = ($("evIn").value || "").trim(); if(!v) return;
-    n.events = n.events || []; n.events.push({ at: now(), text: v });
-    save(); draw(); toast("已记录");
+    let at = now();
+    if(evAt && evAt.value){ const ts = new Date(evAt.value).getTime(); if(!isNaN(ts)) at = ts; }
+    n.events = n.events || []; n.events.push({ at, text: v });
+    save(); draw();
+    toast(at < now() - 60000 ? "已补录（" + fmt(at) + "）" : "已记录");
   };
   $("evAdd").onclick = addEv;
   $("evIn").addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); addEv(); } });
@@ -722,11 +733,19 @@ function drawRight(){
     const i = +el.dataset.evrow;
     const sorted = (n.events||[]).slice().sort((a,b)=>(b.at||0)-(a.at||0));
     const item = sorted[i]; if(!item) return;
-    dialogForm("编辑记录", "时间：" + fmt(item.at) + "（时间不改，只改内容）",
-      [{k:"text",label:"内容",type:"area",ph:"这条线索是什么"}],
-      { text:item.text },
+    const dt = (() => {
+      const d = new Date(item.at || Date.now());
+      const p = n => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+    })();
+    dialogForm("编辑记录", "时间可以改：补录昨天的事，就把日期调回去。",
+      [{k:"at",label:"时间",type:"datetime"},
+       {k:"text",label:"内容",type:"area",ph:"这条线索是什么"}],
+      { at:dt, text:item.text },
       x => {
         if(!(x.text||"").trim()) return toast("内容不能为空");
+        const ts = x.at ? new Date(x.at).getTime() : item.at;
+        if(!isNaN(ts)) item.at = ts;
         item.text = x.text.trim(); save(); draw(); toast("已保存");
       },
       () => { n.events = n.events.filter(y => y !== item); save(); draw(); toast("已删除"); });
