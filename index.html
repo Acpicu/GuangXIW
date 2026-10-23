@@ -191,6 +191,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
     <input id="q" type="search" placeholder="搜人名 / 标签">
     <div class="grow"></div>
     <button class="tb" id="pathBtn" title="查两人之间的最短关系链">路径</button>
+    <button class="tb" id="pullBtn" title="从手机拉取紧急速记，落到时间线">拉速记</button>
     <button class="tb" id="pushBtn" title="用数据线把关系摘要推到手机">推送</button>
     <button class="tb" id="tidyBtn" title="把内容挪到画布正中">归整</button>
     <button class="tb icon" id="leftBtn" title="实体清单">
@@ -886,6 +887,12 @@ $("folderAdd").onclick = () => dialog("text", "新建文件夹", "一个文件�
   folders.push(f); curId = f.id; save(); refreshFolders();
   layout("force"); draw(); center(true); toast("已新建 " + name);
 });
+$("pullBtn").onclick = () => {
+  if(!window.chrome || !window.chrome.webview) return toast("请用 GuangXIW.exe 打开才能拉取");
+  toast("正在从手机拉取速记...");
+  window.chrome.webview.postMessage("pullMemos");
+};
+
 $("pushBtn").onclick = () => {
   if(!window.chrome || !window.chrome.webview){ return toast("请用 GuangXIW.exe 打开才能推送"); }
   exportSj(true);                 // 先导出到下载目录
@@ -893,7 +900,26 @@ $("pushBtn").onclick = () => {
   window.chrome.webview.postMessage("push");
 };
 window.chrome && window.chrome.webview && window.chrome.webview.addEventListener("message", ev => {
-  toast(String(ev.data || "推送完成"));
+  const s = String(ev.data || "");
+  if(s.startsWith("MEMOS:")){
+    try{
+      const arr = JSON.parse(s.slice(6));
+      const d = data();
+      let n = d.nodes.find(x => x.name === "速记（手机）");
+      if(!n){ n = mkNode("速记（手机）", "other"); n.tags = ["速记"]; d.nodes.push(n); }
+      n.events = n.events || [];
+      let add = 0;
+      arr.forEach(m => {
+        if(!m.text) return;
+        if(n.events.some(e => e.text === m.text && Math.abs((e.at||0)-(m.at||0)) < 1000)) return;
+        n.events.push({ at: m.at || now(), text: m.text }); add++;
+      });
+      save(); draw(); openDrawer("left"); tab = "time"; draw();
+      toast(`已拉取 ${add} 条速记，可在时间线里改日期`);
+    }catch(e){ toast("速记文件解析失败"); }
+    return;
+  }
+  toast(s || "完成");
 });
 
 $("tidyBtn").onclick = () => {

@@ -119,6 +119,62 @@ static class AdbPush
     }
 }
 
+static class AdbPush
+{
+    static string AdbPath()
+    {
+        string adb = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            @"Android\Sdk\platform-tools\adb.exe");
+        return File.Exists(adb) ? adb : "adb";
+    }
+
+    static string Run(string args)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo(AdbPath(), args)
+        {
+            UseShellExecute = false, RedirectStandardOutput = true,
+            RedirectStandardError = true, CreateNoWindow = true
+        };
+        using (var pr = System.Diagnostics.Process.Start(psi))
+        {
+            string o = pr.StandardOutput.ReadToEnd() + pr.StandardError.ReadToEnd();
+            pr.WaitForExit(20000);
+            return pr.ExitCode == 0 ? "OK" : o;
+        }
+    }
+
+    /// 把导出目录里最新的 guangxiw-relations-*.json 推到手机 /sdcard/Download。
+    public static string PushLatest()
+    {
+        try
+        {
+            string dl = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            if (!Directory.Exists(dl)) return "找不到下载目录";
+            var files = Directory.GetFiles(dl, "guangxiw-relations-*.json");
+            if (files.Length == 0) return "没找到关系摘要，先点导出";
+            Array.Sort(files);
+            string newest = files[files.Length - 1];
+            string r = Run("push \"" + newest + "\" /sdcard/Download/");
+            return r == "OK" ? "已推送到手机：" + Path.GetFileName(newest) : "推送失败：" + r;
+        }
+        catch (Exception ex) { return "推送失败：" + ex.Message; }
+    }
+
+    /// 从手机拉取速记 JSON，内容直接回给页面。
+    public static string PullMemos()
+    {
+        try
+        {
+            string tmp = Path.Combine(Path.GetTempPath(), "sj-memos.json");
+            if (File.Exists(tmp)) File.Delete(tmp);
+            string r = Run("pull /sdcard/Android/data/com.sj.followclip/files/sj-memos.json \"" + tmp + "\"");
+            if (r != "OK" || !File.Exists(tmp)) return "拉取失败：" + r;
+            return "MEMOS:" + File.ReadAllText(tmp);
+        }
+        catch (Exception ex) { return "拉取失败：" + ex.Message; }
+    }
+}
+
 static class AppHost
 {
     [STAThread]
@@ -159,6 +215,7 @@ static class AppHost
                 {
                     string msg = e2.TryGetWebMessageAsString();
                     if (msg == "push") web.CoreWebView2.PostWebMessageAsString(AdbPush.PushLatest());
+                    if (msg == "pullMemos") web.CoreWebView2.PostWebMessageAsString(AdbPush.PullMemos());
                 };
                 web.Source = new Uri(html);
             }
