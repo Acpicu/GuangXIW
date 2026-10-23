@@ -191,6 +191,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
     <input id="q" type="search" placeholder="搜人名 / 标签">
     <div class="grow"></div>
     <button class="tb" id="pathBtn" title="查两人之间的最短关系链">路径</button>
+    <button class="tb" id="pushBtn" title="用数据线把关系摘要推到手机">推送</button>
     <button class="tb" id="tidyBtn" title="把内容挪到画布正中">归整</button>
     <button class="tb icon" id="leftBtn" title="实体清单">
       <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg></button>
@@ -885,6 +886,16 @@ $("folderAdd").onclick = () => dialog("text", "新建文件夹", "一个文件�
   folders.push(f); curId = f.id; save(); refreshFolders();
   layout("force"); draw(); center(true); toast("已新建 " + name);
 });
+$("pushBtn").onclick = () => {
+  if(!window.chrome || !window.chrome.webview){ return toast("请用 GuangXIW.exe 打开才能推送"); }
+  exportSj(true);                 // 先导出到下载目录
+  toast("正在推送...");
+  window.chrome.webview.postMessage("push");
+};
+window.chrome && window.chrome.webview && window.chrome.webview.addEventListener("message", ev => {
+  toast(String(ev.data || "推送完成"));
+});
+
 $("tidyBtn").onclick = () => {
   layout("force"); draw();
   const el = vp; el.style.transition = "transform .26s ease-out";
@@ -1015,7 +1026,7 @@ function exportMd(){
   download(`guangxiw-${(d.name||"folder").replace(/[\\/:*?"<>|]/g,"_")}.md`, L.join("\n"), "text/markdown");
   toast("已导出 Markdown");
 }
-function exportSj(){
+function exportSj(silent){
   const d = data(), persons = [];
   d.nodes.filter(n => n.type === "person").forEach(n => {
     const rels = [];
@@ -1031,7 +1042,7 @@ function exportSj(){
   if(!persons.length) return toast("还没有可导出的关系");
   download(`guangxiw-relations-${(d.name||"folder").replace(/[\\/:*?"<>|]/g,"_")}.json`,
     JSON.stringify({ kind:"guangxiw.relations", version:2, folder:d.name, generatedAt:now(), persons }, null, 2));
-  toast(`已导出 ${persons.length} 人的关系摘要`);
+  if(!silent) toast(`已导出 ${persons.length} 人的关系摘要`);
 }
 function importOwn(obj){
   if(!obj) return toast("空文件");
