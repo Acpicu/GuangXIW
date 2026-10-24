@@ -57,7 +57,7 @@ select:hover{border-color:#3d4650}
 .tb.icon{width:30px;padding:0;justify-content:center}
 
 /* ── 画布 ── */
-#stage{position:absolute;inset:56px 0 0 0}
+#stage{position:absolute;inset:56px 0 0 0;--insL:0px;--insR:0px}
 svg#g{width:100%;height:100%;display:block;cursor:grab;user-select:none;touch-action:none}
 svg#g.pan{cursor:grabbing}
 .e{stroke:#333c46;stroke-linecap:round;transition:stroke .15s,opacity .15s}
@@ -75,15 +75,22 @@ svg#g.pan{cursor:grabbing}
 .n .bar{pointer-events:none}
 
 /* ── 底部捕获条 ── */
-#capture{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:20;
-  display:flex;align-items:center;gap:8px;width:min(680px,calc(100% - 40px));
+#capture{position:absolute;bottom:18px;z-index:20;
+  left:calc(50% + (var(--insL) - var(--insR)) / 2);transform:translateX(-50%);
+  display:flex;align-items:center;gap:8px;
+  width:min(760px,calc(100% - var(--insL) - var(--insR) - 40px));
   background:rgba(22,26,32,.96);border:1px solid var(--hair2);border-radius:8px;padding:8px 10px;
   box-shadow:0 12px 30px rgba(0,0,0,.35)}
-#capture input{flex:1;background:transparent;border:0;outline:none;font-size:13.5px}
+#capture input{flex:1;min-width:0;background:transparent;border:0;outline:none;font-size:13.5px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#capture .bt{flex:none}
 #capture input::placeholder{color:var(--fg3)}
 #capture .sep{width:1px;height:20px;background:var(--hair2)}
-#hint{position:absolute;left:16px;bottom:20px;z-index:9;font:12px/1.7 var(--sans);
-  color:#7c828b;letter-spacing:0;text-shadow:0 0 .4px rgba(255,255,255,.16)}
+#hint{position:absolute;left:calc(var(--insL) + 12px);bottom:62px;z-index:26;font:12px/1.6 var(--sans);
+  color:#9aa0a8;letter-spacing:0;
+  max-width:calc(100% - var(--insL) - var(--insR) - 120px);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;pointer-events:none;
+  padding:2px 7px;border-radius:4px;background:rgba(11,15,20,.62)}
 
 /* ── 抽屉（左：清单 / 右：详情）── */
 .drawer{position:absolute;top:56px;bottom:0;width:300px;z-index:25;display:flex;flex-direction:column;
@@ -202,9 +209,9 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
 
   <div id="stage">
     <svg id="g"><g id="vp"><g id="edges"></g><g id="nodes"></g></g></svg>
-    <div id="hint">拖动画布 · 滚轮缩放 · 双击空白新建 · Shift+拖节点连线 · Ctrl+K 详情</div>
+    <div id="hint">拖动画布 · 滚轮缩放 · 双击空白新建 · Shift 拖拽连线 · Ctrl+L 清单 · Ctrl+K 详情</div>
     <div id="capture">
-      <input id="capInput" placeholder="速记：选中谁就记到谁名下（回车）">
+      <input id="capInput" placeholder="速记：记到选中的人名下，回车保存">
       <div class="sep"></div>
       <button class="bt" id="addBtn">人物</button>
       <button class="bt solid" id="capBtn">记一笔</button>
@@ -1049,16 +1056,24 @@ function capture(){
 }
 
 /* 抽屉 */
+function syncInsets(){
+  const L = $("left").classList.contains("open") ? 300 : 0;
+  const R = $("right").classList.contains("open") ? 336 : 0;
+  $("stage").style.setProperty("--insL", L + "px");
+  $("stage").style.setProperty("--insR", R + "px");
+}
 function openDrawer(which){
   if(which === "left") $("left").classList.add("open");
   if(which === "right") $("right").classList.add("open");
   $("leftBtn").classList.toggle("on", $("left").classList.contains("open"));
   $("rightBtn").classList.toggle("on", $("right").classList.contains("open"));
+  syncInsets();
 }
 function closeDrawer(which){
   $(which).classList.remove("open");
   $("leftBtn").classList.toggle("on", $("left").classList.contains("open"));
   $("rightBtn").classList.toggle("on", $("right").classList.contains("open"));
+  syncInsets();
 }
 $("leftBtn").onclick = () => $("left").classList.contains("open") ? closeDrawer("left") : openDrawer("left");
 $("rightBtn").onclick = () => $("right").classList.contains("open") ? closeDrawer("right") : openDrawer("right");
@@ -1251,6 +1266,7 @@ refreshFolders();
 layout("force");
 draw();
 center(true);
+syncInsets();
 window.addEventListener("resize", () => { applyView(); });
 </script>
 </body>
