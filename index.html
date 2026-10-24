@@ -185,6 +185,15 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
   .todobox{width:14px;height:14px;flex:none;margin-top:2px;border:1px solid var(--line2);border-radius:3px;
     font-size:11px;line-height:12px;text-align:center;cursor:pointer;color:var(--brass)}
   .todohow{display:block;font-size:11px;color:var(--fg3);margin-top:2px}
+/* 待办标签 & 信息流标签 */
+  .todolabel{display:inline-block;margin-right:6px;padding:0 6px;border-radius:4px;font-size:11px;
+    background:rgba(200,169,106,.16);color:var(--brass);border:1px solid rgba(200,169,106,.35)}
+  .evtag{display:inline-block;margin-right:6px;padding:0 5px;border-radius:4px;font-size:10.5px;
+    color:#9aa0a8;border:1px solid var(--hair2)}
+  .evtag.lab{color:var(--brass);border-color:rgba(200,169,106,.35);background:rgba(200,169,106,.12)}
+  .evtag.ok{color:#67c98b;border-color:rgba(103,201,139,.4)}
+  .evtag.no{color:#e0716b;border-color:rgba(224,113,107,.4)}
+  .evrow.istd{opacity:.95}
 </style>
 </head>
 <body>
@@ -227,7 +236,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
     <header><span>清单</span><button class="tb icon x" id="leftClose">×</button></header>
     <div class="tabs">
       <button class="tab on" id="tabList">实体</button>
-      <button class="tab" id="tabTime">时间线</button>
+      <button class="tab" id="tabTime">信息</button>
       <button class="tab" id="tabFolder">文件夹</button>
     </div>
     <div class="body" id="leftBody"></div>
@@ -557,15 +566,19 @@ function drawLeft(){
 
   if(tab === "time"){
     const rows = [];
-    d.nodes.forEach(n => (n.events||[]).forEach(ev => rows.push({ at:ev.at, text:ev.text, who:n.name, id:n.id })));
+    d.nodes.forEach(n => (n.events||[]).forEach(ev => rows.push({ at:ev.at, text:ev.text, who:n.name, id:n.id, kind:"ev", st:ev.st })));
+    d.nodes.forEach(n => (n.todos||[]).forEach(td => rows.push({ at:td.at, text:td.text, who:n.name, id:n.id, kind:"td", label:td.label, done:td.done })));
     rows.sort((a,b) => (b.at||0)-(a.at||0));
-    if(!rows.length){ box.innerHTML = `<div class="empty">还没有任何记录。选中一个人，在详情里记一笔。</div>`; return; }
+    if(!rows.length){ box.innerHTML = `<div class="empty">还没有任何记录。选中一个人，在详情里记一笔或加个待办。</div>`; return; }
     let html = "", day = "";
     rows.forEach(r => {
       const dd = r.at ? fmtDate(r.at) : "未标日期";
       if(dd !== day){ html += `<div class="evday">${dd}</div>`; day = dd; }
-      html += `<div class="evrow" data-ev="${r.id}"><span class="t">${r.at ? fmtDate(r.at) : "--"}</span>
-        <span class="w">${esc(r.who)}</span><span>${esc(r.text)}</span></div>`;
+      const tag = r.kind === "td"
+        ? `<span class="evtag">待办${r.done ? "·完成" : ""}</span>${r.label ? `<span class="evtag lab">${esc(r.label)}</span>` : ""}`
+        : (r.st === "ok" ? `<span class="evtag ok">已证实</span>` : r.st === "no" ? `<span class="evtag no">已推翻</span>` : "");
+      html += `<div class="evrow${r.kind === "td" ? " istd" : ""}" data-ev="${r.id}"><span class="t">${r.at ? fmtDate(r.at) : "--"}</span>
+        <span class="w">${esc(r.who)}</span>${tag}<span>${esc(r.text)}</span></div>`;
     });
     box.innerHTML = html;
     box.querySelectorAll("[data-ev]").forEach(el => el.onclick = () => {
@@ -621,8 +634,11 @@ function drawLeft(){
   const tdBtn = $("tdAdd");
   if(tdBtn) tdBtn.onclick = () => {
     const txt = ($("tdText").value || "").trim(); if(!txt) return;
+    const labEl = $("tdLabel");
+    const lab = labEl ? (labEl.value || "").trim() : "";
     n.todos = n.todos || [];
-    n.todos.push({ id:uid("td"), text:txt, how:($("tdHow").value||"").trim(), at:now(), done:false });
+    n.todos.push({ id:uid("td"), label:lab, text:txt, at:now(), done:false });
+    if(labEl) labEl.value = "";
     save(); drawRight(); toast("已加待办");
   };
   box.querySelectorAll("[data-todo]").forEach(el => {
@@ -677,7 +693,7 @@ function todoRows(n){
   if(!list.length) return `<div class="empty" style="padding:2px 4px">还没有待办。比如「确认是否同一人」/「留存主页截图」。</div>`;
   return list.map((td,i) => `<div class="kv todorow${td.done?" done":""}">
     <b class="todobox" data-todo="${i}" data-act="done" title="标记完成">${td.done?"✓":""}</b>
-    <span class="v"><span class="todotxt">${esc(td.text)}</span>${td.how?`<span class="todohow">手段：${esc(td.how)}</span>`:""}</span>
+    <span class="v">${td.label?`<span class="todolabel">${esc(td.label)}</span>`:""}<span class="todotxt">${esc(td.text)}</span>${td.how?`<span class="todohow">手段：${esc(td.how)}</span>`:""}</span>
     <b class="evop" data-todo="${i}" data-act="del" title="删除">×</b>
   </div>`).join("");
 }
@@ -733,8 +749,8 @@ function drawRight(){
 
     <div class="sec"><h5>待办 <span style="color:var(--fg3)">${(n.todos||[]).filter(x=>!x.done).length}/${(n.todos||[]).length}</span></h5>
       <div id="todoList">${todoRows(n)}</div>
-      <div class="f" style="margin-top:7px"><input type="text" id="tdText" placeholder="要确认什么"></div>
-      <div class="f"><input type="text" id="tdHow" placeholder="打算通过什么手段收集 / 护证"><button class="bt" id="tdAdd">加</button></div>
+      <div class="f" style="margin-top:7px"><input type="text" id="tdLabel" placeholder="标签，如：待核实 / 待截图"></div>
+      <div class="f"><input type="text" id="tdText" placeholder="要做的事情"><button class="bt" id="tdAdd">加</button></div>
     </div>
 
     <div class="sec"><h5>建立关系</h5>
