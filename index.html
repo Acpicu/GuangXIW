@@ -57,7 +57,7 @@ select:hover{border-color:#3d4650}
 .tb.icon{width:30px;padding:0;justify-content:center}
 
 /* ── 画布 ── */
-#stage{position:absolute;inset:56px 0 0 0;--insL:0px;--insR:0px}
+#stage{position:absolute;inset:56px 0 0 0}
 svg#g{width:100%;height:100%;display:block;cursor:grab;user-select:none;touch-action:none}
 svg#g.pan{cursor:grabbing}
 .e{stroke:#333c46;stroke-linecap:round;transition:stroke .15s,opacity .15s}
@@ -75,22 +75,15 @@ svg#g.pan{cursor:grabbing}
 .n .bar{pointer-events:none}
 
 /* ── 底部捕获条 ── */
-#capture{position:absolute;bottom:18px;z-index:20;
-  left:calc(50% + (var(--insL) - var(--insR)) / 2);transform:translateX(-50%);
-  display:flex;align-items:center;gap:8px;
-  width:min(760px,calc(100% - var(--insL) - var(--insR) - 40px));
+#capture{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:20;
+  display:flex;align-items:center;gap:8px;width:min(680px,calc(100% - 40px));
   background:rgba(22,26,32,.96);border:1px solid var(--hair2);border-radius:8px;padding:8px 10px;
   box-shadow:0 12px 30px rgba(0,0,0,.35)}
-#capture input{flex:1;min-width:0;background:transparent;border:0;outline:none;font-size:13.5px;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#capture .bt{flex:none}
+#capture input{flex:1;background:transparent;border:0;outline:none;font-size:13.5px}
 #capture input::placeholder{color:var(--fg3)}
 #capture .sep{width:1px;height:20px;background:var(--hair2)}
-#hint{position:absolute;left:calc(var(--insL) + 12px);bottom:62px;z-index:26;font:12px/1.6 var(--sans);
-  color:#9aa0a8;letter-spacing:0;
-  max-width:calc(100% - var(--insL) - var(--insR) - 120px);white-space:nowrap;
-  overflow:hidden;text-overflow:ellipsis;pointer-events:none;
-  padding:2px 7px;border-radius:4px;background:rgba(11,15,20,.62)}
+#hint{position:absolute;left:16px;bottom:20px;z-index:9;font:12px/1.7 var(--sans);
+  color:#7c828b;letter-spacing:0;text-shadow:0 0 .4px rgba(255,255,255,.16)}
 
 /* ── 抽屉（左：清单 / 右：详情）── */
 .drawer{position:absolute;top:56px;bottom:0;width:300px;z-index:25;display:flex;flex-direction:column;
@@ -156,7 +149,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
 .kv{display:flex;align-items:center;gap:6px;font-size:12.5px;padding:5px 6px;border-radius:5px;cursor:pointer}
 .kv:hover{background:var(--raise)}
 .kv .k{color:var(--fg3);min-width:52px}
-.kv .v{flex:1;min-width:0;white-space:normal;word-break:break-word;line-height:1.5}
+.kv .v{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rel{display:flex;align-items:center;gap:8px;padding:6px;border-radius:5px;font-size:12.5px;cursor:pointer}
 .rel:hover{background:var(--raise)}
 .rel .s{margin-left:auto;font:11px/1 var(--mono);color:var(--rust)}
@@ -199,7 +192,8 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
     <input id="q" type="search" placeholder="搜人名 / 标签">
     <div class="grow"></div>
     <button class="tb" id="pathBtn" title="查两人之间的最短关系链">路径</button>
-    <button class="tb" id="pathClear" title="清除关系链高亮" style="display:none">清除路径</button>
+    <button class="tb" id="pullBtn" title="从手机拉取紧急速记，落到时间线">拉速记</button>
+    <button class="tb" id="pushBtn" title="用数据线把关系摘要推到手机">推送</button>
     <button class="tb" id="tidyBtn" title="把内容挪到画布正中">归整</button>
     <button class="tb icon" id="leftBtn" title="实体清单">
       <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg></button>
@@ -209,9 +203,9 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
 
   <div id="stage">
     <svg id="g"><g id="vp"><g id="edges"></g><g id="nodes"></g></g></svg>
-    <div id="hint">拖动画布 · 滚轮缩放 · 双击空白新建 · Shift 拖拽连线 · Ctrl+L 清单 · Ctrl+K 详情</div>
+    <div id="hint">拖动画布 · 滚轮缩放 · 双击空白新建 · Shift+拖节点连线 · Ctrl+K 详情</div>
     <div id="capture">
-      <input id="capInput" placeholder="速记：记到选中的人名下，回车保存">
+      <input id="capInput" placeholder="速记：选中谁就记到谁名下（回车）">
       <div class="sep"></div>
       <button class="bt" id="addBtn">人物</button>
       <button class="bt solid" id="capBtn">记一笔</button>
@@ -245,7 +239,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
 <input type="file" id="avPick" accept="image/*" hidden>
 <script>
 /* ═══════════════ 数据层 ═══════════════ */
-const VERSION = "2.7.1";
+const VERSION = "2.0.0";
 const KEY = "guangxiw.v2";
 const TYPES = [["person","人物"],["org","组织"],["place","地点"],["account","账号"],["other","其他"]];
 const TYPE_LABEL = Object.fromEntries(TYPES);
@@ -257,7 +251,7 @@ let folders = [], curId = null, selected = null;
 let view = {x:0, y:0, k:1}, drag = null, pan = null, hover = null;
 let pathN = new Set(), pathE = new Set();
 let linking = null;   // 正在拖线：{from, x, y}
-let filterType = null, tab = "list", layoutKind = "force";
+let filterType = null, tab = "list";
 
 const $ = id => document.getElementById(id);
 const uid = p => p + Math.random().toString(36).slice(2, 8);
@@ -282,14 +276,8 @@ const mkNode = (name, type = "person") => ({ id:uid("n"), name, type, tags:[], a
 const mkEdge = (from, to, type = "其他", strength = 3, note = "", evidence = "") =>
   ({ id:uid("e"), from, to, type, strength, note, evidence, at: now() });
 
-function notifyBackup(){
-  try{
-    if(window.chrome && window.chrome.webview)
-      window.chrome.webview.postMessage("BACKUP:" + JSON.stringify({ folders, cur:curId, v:VERSION }));
-  }catch(e){}
-}
 function save(){
-  try{ localStorage.setItem(KEY, JSON.stringify({ folders, cur:curId, v:VERSION })); notifyBackup(); }
+  try{ localStorage.setItem(KEY, JSON.stringify({ folders, cur:curId, v:VERSION })); }
   catch(e){ toast("保存失败：头像过多"); }
 }
 function load(){
@@ -316,7 +304,9 @@ function load(){
     }
   }catch(e){}
   if(!folders.length){
-    folders = [{ id:uid("f"), name:"默认文件夹", nodes:[], edges:[] }];
+    const a = mkNode("张三"), b = mkNode("李四"), c = mkNode("某科技公司","org");
+    folders = [{ id:uid("f"), name:"默认文件夹", nodes:[a,b,c],
+      edges:[mkEdge(a.id,b.id,"同学",3,"高中同桌"), mkEdge(a.id,c.id,"同事",4,"同公司")] }];
     curId = folders[0].id;
   }
   // 兼容旧字段
@@ -467,10 +457,8 @@ function draw(){
   }
   const pathOn = pathN.size > 0;
 
-  const visible = new Set(d.nodes.filter(n => !filterType || n.type === filterType).map(n => n.id));
   gE.innerHTML = d.edges.map(e => {
     const a = by[e.from], b = by[e.to]; if(!a || !b) return "";
-    if(!visible.has(e.from) || !visible.has(e.to)) return "";   // 端点被筛掉，线也别画
     const onPath = pathE.has(e.id);
     const hot = onPath || e.from === focusId || e.to === focusId;
     const dim = (!!focusId && !hot) || (pathOn && !onPath);
@@ -513,8 +501,6 @@ function draw(){
     </g>`;
   }).join("");
 
-  const pc = $("pathClear");
-  if(pc) pc.style.display = pathN.size ? "inline-flex" : "none";
   applyView();
   drawLeft();
   drawRight();
@@ -540,7 +526,7 @@ function drawLeft(){
       ${list.length ? list.map(n => `<div class="row${selected===n.id?" sel":""}" data-jump="${n.id}">
         <span class="dot" style="background:${TYPE_COLOR[n.type]||TYPE_COLOR.other}"></span>
         <span class="nm">${esc(n.name)}</span><span class="dg">${deg[n.id]||0}</span></div>`).join("")
-        : `<div class="empty">${d.nodes.length ? "这个分类下还没有实体。" : "还没有实体。画布上双击空白处，或点底部「人物」。"}</div>`}`;
+        : `<div class="empty">还没有实体。画布上双击空白处，或点底部「人物」。</div>`}`;
     box.querySelectorAll(".chip").forEach(el => el.onclick = () => { filterType = el.dataset.t || null; draw(); });
     box.querySelectorAll("[data-jump]").forEach(el => el.onclick = () => {
       selected = el.dataset.jump; openDrawer("right"); draw();
@@ -594,15 +580,8 @@ function drawLeft(){
       <div class="foot"><b>GuangXIW ${VERSION}</b><br>SJ Lens 电脑端 / 手机端互通辅助工具<br>数据保存在本机</div>
     </div>`;
 
-  const laySel = $("laySel");
-  laySel.value = layoutKind;
-  laySel.onchange = () => { layoutKind = laySel.value; layout(layoutKind); draw(); center(true); };
-  const nameInput = $("fName");
-  if(nameInput) nameInput.addEventListener("change", () => {
-    const v = (nameInput.value || "").trim();
-    if(!v || v === d.name) return;
-    d.name = v; save(); refreshFolders(); toast("已重命名");
-  });
+  $("laySel").value = "force";
+  $("laySel").onchange = () => { layout($("laySel").value); draw(); center(true); };
   $("fRename").onclick = () => dialog("text", "文件夹名称", "", "名称", d.name, v => {
     if(!v) return; d.name = v.trim(); save(); refreshFolders(); draw(); toast("已重命名");
   });
@@ -970,25 +949,25 @@ $("folderSel").onchange = e => {
 };
 $("folderAdd").onclick = () => dialog("text", "新建文件夹", "一个文件夹装一个调查目标。", "文件夹名", "", name => {
   if(!name) return;
-  const f = { id:uid("f"), name:name.trim(), nodes:[], edges:[] };
+  const a = mkNode("张三"), b = mkNode("李四");
+  const f = { id:uid("f"), name:name.trim(), nodes:[a,b], edges:[mkEdge(a.id,b.id,"其他",3)] };
   folders.push(f); curId = f.id; save(); refreshFolders();
   layout("force"); draw(); center(true); toast("已新建 " + name);
 });
+$("pullBtn").onclick = () => {
+  if(!window.chrome || !window.chrome.webview) return toast("请用 GuangXIW.exe 打开才能拉取");
+  toast("正在从手机拉取速记...");
+  window.chrome.webview.postMessage("pullMemos");
+};
+
+$("pushBtn").onclick = () => {
+  if(!window.chrome || !window.chrome.webview){ return toast("请用 GuangXIW.exe 打开才能推送"); }
+  exportSj(true);                 // 先导出到下载目录
+  toast("正在推送...");
+  window.chrome.webview.postMessage("push");
+};
 window.chrome && window.chrome.webview && window.chrome.webview.addEventListener("message", ev => {
   const s = String(ev.data || "");
-  if(s.startsWith("RESTORE:")){
-    const payload = s.slice(8);
-    if(!payload || payload.length < 8) return;
-    try{
-      const d = JSON.parse(payload);
-      if(!Array.isArray(d.folders) || !d.folders.length) return;
-      if(localStorage.getItem(KEY)) return;          // 已有数据时不覆盖
-      folders = d.folders; curId = d.cur || folders[0].id;
-      save(); refreshFolders(); layout("force"); draw(); center(true);
-      toast("已从本地备份恢复 " + folders.length + " 个文件夹");
-    }catch(e){}
-    return;
-  }
   if(s.startsWith("MEMOS:")){
     try{
       const arr = JSON.parse(s.slice(6));
@@ -1032,8 +1011,6 @@ $("pathBtn").onclick = () => {
     });
   });
 };
-const pathClearBtn = $("pathClear");
-if(pathClearBtn) pathClearBtn.onclick = () => { pathN = new Set(); pathE = new Set(); draw(); toast("已清除"); };
 $("q").addEventListener("input", () => draw());
 $("addBtn").onclick = () => dialog("text", "新增人物", "输入名字，回车加入。", "名字", "", name => {
   if(!name) return;
@@ -1056,24 +1033,16 @@ function capture(){
 }
 
 /* 抽屉 */
-function syncInsets(){
-  const L = $("left").classList.contains("open") ? 300 : 0;
-  const R = $("right").classList.contains("open") ? 336 : 0;
-  $("stage").style.setProperty("--insL", L + "px");
-  $("stage").style.setProperty("--insR", R + "px");
-}
 function openDrawer(which){
   if(which === "left") $("left").classList.add("open");
   if(which === "right") $("right").classList.add("open");
   $("leftBtn").classList.toggle("on", $("left").classList.contains("open"));
   $("rightBtn").classList.toggle("on", $("right").classList.contains("open"));
-  syncInsets();
 }
 function closeDrawer(which){
   $(which).classList.remove("open");
   $("leftBtn").classList.toggle("on", $("left").classList.contains("open"));
   $("rightBtn").classList.toggle("on", $("right").classList.contains("open"));
-  syncInsets();
 }
 $("leftBtn").onclick = () => $("left").classList.contains("open") ? closeDrawer("left") : openDrawer("left");
 $("rightBtn").onclick = () => $("right").classList.contains("open") ? closeDrawer("right") : openDrawer("right");
@@ -1258,15 +1227,11 @@ function shortestPath(nodes, edges, fromId, toId){
 }
 
 /* ═══════════════ 启动 ═══════════════ */
-if(!localStorage.getItem(KEY) && window.chrome && window.chrome.webview){
-  window.chrome.webview.postMessage("NEED_BACKUP");
-}
 load();
 refreshFolders();
 layout("force");
 draw();
 center(true);
-syncInsets();
 window.addEventListener("resize", () => { applyView(); });
 </script>
 </body>
