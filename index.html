@@ -279,7 +279,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
 <input type="file" id="avPick" accept="image/*" hidden>
 <script>
 /* ═══════════════ 数据层 ═══════════════ */
-const VERSION = "2.12.0";
+const VERSION = "2.13.0";
 const KEY = "guangxiw.v2";
 const TYPES = [["person","人物"],["org","组织"],["place","地点"],["account","账号"],["other","其他"]];
 const TYPE_LABEL = Object.fromEntries(TYPES);
@@ -314,7 +314,26 @@ const data = () => folders.find(f => f.id === curId) || folders[0];
 const mkNode = (name, type = "person") => ({ id:uid("n"), name, type, tags:[], accounts:[], attrs:[],
   events:[], avatar:"", x:0, y:0 });
 const mkEdge = (from, to, type = "其他", strength = 3, note = "", evidence = "") =>
-  ({ id:uid("e"), from, to, type, strength, note, evidence, at: now() });
+  ({ id:uid("e"), from, to, type, strength, note, evidence, grade: "", at: now() });
+
+// 证据号：全库递增 E-001 / E-002 …（备注就是这条证据的正文）
+const SRC_OPTS = ["A 完全可靠","B 一般可靠","C 不太可靠","D 不可靠","E 无法判断"];
+const CRED_OPTS = ["1 已确认","2 大致可信","3 有可能","4 可疑","5 不太可能","6 无法判断"];
+function nextEvidenceId(){
+  let max = 0;
+  folders.forEach(f => (f.edges||[]).forEach(e => {
+    const m = /^E-(\d+)$/.exec((e.evidence||"").trim());
+    if(m) max = Math.max(max, parseInt(m[1], 10));
+  }));
+  return "E-" + String(max + 1).padStart(3, "0");
+}
+// "B2" → 显示用
+function gradeText(g){
+  if(!g) return "";
+  const s = SRC_OPTS.find(x => x[0] === g[0]);
+  const c = CRED_OPTS.find(x => x[0] === g[1]);
+  return (s ? s : g[0]) + " · " + (c ? c : g[1]);
+}
 
 function notifyBackup(){
   try{
@@ -809,18 +828,20 @@ function drawRight(){
           `<span class="chip" data-peer="${esc(x.name)}">${esc(x.name)}</span>`).join("")}</div>` : ""}
       <div class="f"><label>类型</label><select id="rType" style="width:100%">${RELS.map(r=>`<option>${r}</option>`).join("")}</select></div>
       <div class="chips" id="rChips">${[1,2,3,4,5].map(s=>`<span class="chip${s===3?" on":""}" data-s="${s}">强度 ${s}</span>`).join("")}</div>
-      <div class="f"><label>证据</label><input type="text" id="rEv" placeholder="E-003（可空）"></div>
-      <div class="f col"><label>备注</label><textarea id="rNote" rows="2" placeholder="依据 / 怎么认识（可以写长一点，会完整显示在已有关联里）"></textarea></div>
+      <div class="f"><label>来源</label><select id="rSrc" style="width:100%">${SRC_OPTS.map(s=>`<option>${s}</option>`).join("")}</select></div>
+      <div class="f"><label>可信度</label><select id="rCred" style="width:100%">${CRED_OPTS.map(s=>`<option>${s}</option>`).join("")}</select></div>
+      <div class="f col"><label>备注（=证据）</label><textarea id="rNote" rows="3" placeholder="怎么认识的 / 谁说的 / 亲眼见过什么（写清楚，它会被当成这条关系的证据）"></textarea></div>
       <button class="bt solid wide" id="rAdd">建立关系</button>
     </div>
 
-    <div class="sec"><h5>已有关联 <span style="color:var(--fg3)">${rels.length}</span></h5>
+    <div class="sec"><h5>已有关联 <span style="color:var(--fg3)">${rels.length}</span>
+      ${rels.some(e => !e.evidence) ? `<button class="bt" id="backfillEv" style="float:right;font-size:11px;padding:1px 7px">补齐证据号</button>` : ""}</h5>
       ${rels.length ? rels.map(e => {
         const o = d.nodes.find(x => x.id === (e.from === n.id ? e.to : e.from));
         return `<div class="relwrap" data-rel="${e.id}">
           <div class="rel"><span>${esc(o ? o.name : "?")}</span>
             <span style="color:var(--fg3)">${esc(e.type)}</span>
-            ${e.evidence ? `<span class="ev">${esc(e.evidence)}</span>` : ""}
+            <span class="ev" title="${esc(gradeText(e.grade))}">${esc(e.evidence || "未登记")}${e.grade ? ` ${esc(e.grade)}` : ""}</span>
             <span class="s">${e.strength || 3}</span></div>
           ${e.note ? `<div class="relnote">${esc(e.note)}</div>` : ""}</div>`;
       }).join("") : `<div class="empty" style="padding:2px 4px">还没有关系。</div>`}
@@ -967,32 +988,55 @@ function drawRight(){
     if(name === n.name) return toast("不能和自己建立关系");
     let other = d.nodes.find(x => x.id !== n.id && x.name.trim() === name);
     if(!other){ other = mkNode(name); d.nodes.push(other); }
-    const type = $("rType").value, ev = ($("rEv").value||"").trim(), note = ($("rNote").value||"").trim();
+    const type = $("rType").value, note = ($("rNote").value||"").trim();
+    const srcEl = $("rSrc"), credEl = $("rCred");
+    const grade = (srcEl ? srcEl.value[0] : "C") + (credEl ? credEl.value[0] : "3");
+    const ev = nextEvidenceId();
     const dup = d.edges.find(e => (e.from===n.id&&e.to===other.id)||(e.from===other.id&&e.to===n.id));
-    if(dup){ dup.type = type; dup.strength = strength; if(ev) dup.evidence = ev; if(note) dup.note = note; toast("关系已更新"); }
-    else { d.edges.push(mkEdge(n.id, other.id, type, strength, note, ev)); toast("已建立关系"); }
+    if(dup){ dup.type = type; dup.strength = strength;
+      if(note) dup.note = note;
+      if(!dup.evidence) dup.evidence = ev;
+      dup.grade = grade; toast("关系已更新"); }
+    else { const e2 = mkEdge(n.id, other.id, type, strength, note, ev); e2.grade = grade;
+      d.edges.push(e2); toast("已建立关系，" + ev); }
     save(); layout("force"); draw(); center(true);
   };
   $("rAdd").onclick = addRel;
-  ["rTo","rEv","rNote"].forEach(id => $(id).addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); addRel(); } }));
+  ["rTo"].forEach(id => $(id).addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); addRel(); } }));
   box.querySelectorAll("[data-rel]").forEach(el => el.onclick = () => {
     const id = el.dataset.rel, e0 = d.edges.find(x => x.id === id); if(!e0) return;
     const other = d.nodes.find(x => x.id === (e0.from === n.id ? e0.to : e0.from));
-    dialogForm("编辑关系", `与「${other ? other.name : "?"}」的关系`,
+    dialogForm("编辑关系", `与「${other ? other.name : "?"}」的关系 · ${e0.evidence || "未登记证据"}`,
       [{k:"type",label:"类型",type:"select",opts:RELS},
        {k:"strength",label:"强度",ph:"1-5"},
-       {k:"evidence",label:"证据",ph:"E-003（可空）"},
-       {k:"note",label:"备注",ph:"依据 / 怎么认识"}],
-      { type:e0.type, strength:String(e0.strength||3), evidence:e0.evidence||"", note:e0.note||"" },
+       {k:"note",label:"备注（=证据）",type:"area",ph:"怎么认识的 / 谁说的 / 亲眼见过什么"},
+       {k:"src",label:"来源可靠性",type:"select",opts:SRC_OPTS},
+       {k:"cred",label:"情报可信度",type:"select",opts:CRED_OPTS}],
+      { type:e0.type, strength:String(e0.strength||3), note:e0.note||"",
+        src: (SRC_OPTS.find(x => x[0] === (e0.grade||"")[0]) || SRC_OPTS[2]),
+        cred: (CRED_OPTS.find(x => x[0] === (e0.grade||"")[1]) || CRED_OPTS[2]) },
       v => {
         e0.type = v.type || e0.type;
         e0.strength = Math.min(5, Math.max(1, parseInt(v.strength,10) || 3));
-        e0.evidence = (v.evidence||"").trim();
         e0.note = (v.note||"").trim();
+        e0.grade = (v.src||"C")[0] + (v.cred||"3")[0];
+        if(!e0.evidence) e0.evidence = nextEvidenceId();
         save(); draw(); toast("关系已更新");
       },
       () => { d.edges = d.edges.filter(x => x.id !== id); save(); draw(); toast("已删除关系"); });
   });
+  const backfill = $("backfillEv");
+  if(backfill) backfill.onclick = () => {
+    let cnt = 0;
+    d.edges.forEach(e => {
+      if(e.evidence) return;
+      e.evidence = nextEvidenceId();   // 发号后 nextEvidenceId 会跳过它，不会重号
+      if(!e.grade) e.grade = "C3";
+      if(!(e.note||"").trim()) e.note = "历史关联，待补备注";
+      cnt++;
+    });
+    save(); draw(); toast(cnt ? `已补齐 ${cnt} 条关系的证据号` : "没有需要补的");
+  };
   $("nDel").onclick = () => dialog("text", "删除这个实体？", "相连的关系会一起删除。", "输入 yes 确认", "", v => {
     if((v||"").trim().toLowerCase() !== "yes") return;
     d.nodes = d.nodes.filter(x => x.id !== n.id);
@@ -1085,15 +1129,19 @@ svg.addEventListener("pointerup", e => {
         const dup = d.edges.find(x => (x.from === a.id && x.to === b.id) || (x.from === b.id && x.to === a.id));
         if(dup){ toast("这两个人已经有关系了"); }
         else{
-          dialogForm("建立关系", a.name + "  →  " + b.name,
+          dialogForm("建立关系", a.name + " → " + b.name + "：写清这条关系是怎么来的，它就是这条关系的证据",
             [{k:"type",label:"类型",type:"select",opts:RELS},
              {k:"strength",label:"强度",ph:"1-5"},
-             {k:"evidence",label:"证据",ph:"E-003（可空）"}],
-            { type:"其他", strength:"3", evidence:"" },
+             {k:"note",label:"备注（=证据）",type:"area",ph:"怎么认识的 / 谁说的 / 亲眼见过什么"},
+             {k:"src",label:"来源可靠性",type:"select",opts:SRC_OPTS},
+             {k:"cred",label:"情报可信度",type:"select",opts:CRED_OPTS}],
+            { type:"其他", strength:"3", note:"", src:SRC_OPTS[2], cred:CRED_OPTS[2] },
             v => {
-              d.edges.push(mkEdge(a.id, b.id, v.type || "其他",
-                Math.min(5, Math.max(1, parseInt(v.strength,10) || 3)), "", (v.evidence||"").trim()));
-              save(); draw(); toast("已连线");
+              const e = mkEdge(a.id, b.id, v.type || "其他",
+                Math.min(5, Math.max(1, parseInt(v.strength,10) || 3)), (v.note||"").trim(), nextEvidenceId());
+              e.grade = (v.src||"C")[0] + (v.cred||"3")[0];
+              d.edges.push(e);
+              save(); draw(); toast("已连线，" + e.evidence);
             });
         }
       }
@@ -1319,7 +1367,7 @@ function exportSj(silent){
       if(!oid) return;
       const o = d.nodes.find(x => x.id === oid); if(!o) return;
       rels.push({ to:o.name, toType:TYPE_LABEL[o.type]||o.type, type:e.type, strength:e.strength||3,
-        evidence:e.evidence||"", note:e.note||"" });
+        evidence:e.evidence||"", grade:e.grade||"", note:e.note||"" });
     });
     const events = (n.events||[]).map(e => ({ at:e.at||0, text:e.text||"", st:e.st||"", shot:e.shot||"" }));
     const todos = (n.todos||[]).map(td => ({ text:td.text||"", how:td.how||"", at:td.at||0, done:!!td.done }));
@@ -1384,10 +1432,12 @@ function relationsToFolder(obj){
         if(!dup.strength && r.strength) dup.strength = r.strength;
         if(!dup.note && r.note) dup.note = r.note;
         if(!dup.evidence && r.evidence) dup.evidence = r.evidence;
+        if(!dup.grade && r.grade) dup.grade = r.grade;
         return;
       }
       const e = mkEdge(n.id, o.id, r.type || "其他", r.strength || 3, r.note || "");
       e.evidence = r.evidence || "";
+      e.grade = r.grade || "";
       edges.push(e);
     });
     delete n.__rels;
