@@ -173,22 +173,6 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
   background:var(--raise2);border:1px solid var(--brass);border-radius:7px;padding:8px 14px;
   font-size:12.5px;opacity:0;transition:.2s;pointer-events:none}
 #toast.on{opacity:1;transform:translateX(-50%)}
-  .evrow{display:flex;gap:8px;align-items:flex-start}
-  .evops{display:flex;gap:4px;flex:none}
-  .evop{font-size:11px;line-height:16px;padding:0 5px;border:1px solid var(--line2);border-radius:3px;
-    color:var(--fg3);cursor:pointer;user-select:none;font-weight:400}
-  .evop:hover{border-color:var(--brass2);color:var(--brass)}
-  .evop.on{color:#0f1318;background:var(--brass);border-color:var(--brass)}
-  .shotmark{font-size:10px;color:var(--brass);border:1px solid var(--brass2);border-radius:3px;padding:0 3px}
-  .todorow{display:flex;gap:7px;align-items:flex-start}
-  .todorow.done .todotxt{color:var(--fg3);text-decoration:line-through}
-  .todobox{width:14px;height:14px;flex:none;margin-top:2px;border:1px solid var(--line2);border-radius:3px;
-    font-size:11px;line-height:12px;text-align:center;cursor:pointer;color:var(--brass)}
-  .todohow{display:block;font-size:11px;color:var(--fg3);margin-top:2px}
-  .hint{font-size:11px;color:var(--fg3);line-height:1.5;margin:-2px 0 8px}
-  .evtag{font-size:10px;line-height:14px;padding:0 4px;border-radius:3px;flex:none}
-  .evtag.ok{color:#0f1318;background:var(--brass)}
-  .evtag.no{color:#f0d5d1;background:#7a3b34}
 </style>
 </head>
 <body>
@@ -231,7 +215,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
     <header><span>清单</span><button class="tb icon x" id="leftClose">×</button></header>
     <div class="tabs">
       <button class="tab on" id="tabList">实体</button>
-      <button class="tab" id="tabTime">记录信息</button>
+      <button class="tab" id="tabTime">时间线</button>
       <button class="tab" id="tabFolder">文件夹</button>
     </div>
     <div class="body" id="leftBody"></div>
@@ -251,12 +235,10 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
   <div id="toast"></div>
 </div>
 <input type="file" id="filePick" accept=".json,application/json" hidden>
-<input type="file" id="shotPick" accept="image/*" style="display:none">
 <input type="file" id="avPick" accept="image/*" hidden>
 <script>
 /* ═══════════════ 数据层 ═══════════════ */
-const VERSION = "3.0.0";
-let timeMode = "all";
+const VERSION = "2.7.1";
 const KEY = "guangxiw.v2";
 const TYPES = [["person","人物"],["org","组织"],["place","地点"],["account","账号"],["other","其他"]];
 const TYPE_LABEL = Object.fromEntries(TYPES);
@@ -293,14 +275,8 @@ const mkNode = (name, type = "person") => ({ id:uid("n"), name, type, tags:[], a
 const mkEdge = (from, to, type = "其他", strength = 3, note = "", evidence = "") =>
   ({ id:uid("e"), from, to, type, strength, note, evidence, at: now() });
 
-function notifyBackup(){
-  try{
-    if(window.chrome && window.chrome.webview)
-      window.chrome.webview.postMessage("BACKUP:" + JSON.stringify({ folders, cur:curId, v:VERSION }));
-  }catch(e){}
-}
 function save(){
-  try{ localStorage.setItem(KEY, JSON.stringify({ folders, cur:curId, v:VERSION })); notifyBackup(); }
+  try{ localStorage.setItem(KEY, JSON.stringify({ folders, cur:curId, v:VERSION })); }
   catch(e){ toast("保存失败：头像过多"); }
 }
 function load(){
@@ -561,41 +537,18 @@ function drawLeft(){
   }
 
   if(tab === "time"){
-    timeMode = timeMode || "all";
     const rows = [];
-    d.nodes.forEach(n => {
-      (n.events||[]).forEach(ev => rows.push({ at:ev.at||0, text:ev.text||"", who:n.name, id:n.id, kind:"ev", st:ev.st||"" }));
-      if(timeMode !== "timed")
-        (n.attrs||[]).forEach(a => rows.push({ at:0, text:`${a.k}：${a.v}`, who:n.name, id:n.id, kind:"attr", st:"" }));
-    });
-    const list = rows.filter(r => timeMode === "all" || (timeMode === "timed" ? r.kind === "ev" : r.kind === "attr"));
-    const chip = (m, label) => `<span class="chip${(timeMode||"all")===m?" on":""}" data-mode="${m}">${label}</span>`;
-    box.innerHTML = `<div class="chips" style="margin:2px 0 6px">${chip("all","全部")}${chip("timed","带时间")}${chip("untimed","不带时间")}</div>`;
-    if(!list.length){
-      box.insertAdjacentHTML("beforeend", `<div class="empty">${timeMode === "untimed" ? "还没有其他信息/备注。选中一个人，在详情里加。" : "还没有任何记录。选中一个人，在详情里记一笔。"}</div>`);
-      box.querySelectorAll("[data-mode]").forEach(el => el.onclick = () => { timeMode = el.dataset.mode; draw(); });
-      return;
-    }
-    // 带时间的按日期分组；不带时间的单独一段放最后
-    const timed = list.filter(r => r.kind === "ev").sort((a,b) => (b.at||0)-(a.at||0));
-    const untimed = list.filter(r => r.kind === "attr");
+    d.nodes.forEach(n => (n.events||[]).forEach(ev => rows.push({ at:ev.at, text:ev.text, who:n.name, id:n.id })));
+    rows.sort((a,b) => (b.at||0)-(a.at||0));
+    if(!rows.length){ box.innerHTML = `<div class="empty">还没有任何记录。选中一个人，在详情里记一笔。</div>`; return; }
     let html = "", day = "";
-    timed.forEach(r => {
+    rows.forEach(r => {
       const dd = r.at ? fmtDate(r.at) : "未标日期";
       if(dd !== day){ html += `<div class="evday">${dd}</div>`; day = dd; }
-      const mark = r.st === "ok" ? `<span class="evtag ok">证</span>` : r.st === "no" ? `<span class="evtag no">翻</span>` : "";
       html += `<div class="evrow" data-ev="${r.id}"><span class="t">${r.at ? fmtDate(r.at) : "--"}</span>
-        <span class="w">${esc(r.who)}</span><span>${esc(r.text)}</span>${mark}</div>`;
+        <span class="w">${esc(r.who)}</span><span>${esc(r.text)}</span></div>`;
     });
-    if(untimed.length){
-      html += `<div class="evday">其他信息 / 备注（无时间）</div>`;
-      untimed.forEach(r => {
-        html += `<div class="evrow" data-ev="${r.id}"><span class="t">--</span>
-          <span class="w">${esc(r.who)}</span><span>${esc(r.text)}</span></div>`;
-      });
-    }
-    box.insertAdjacentHTML("beforeend", html);
-    box.querySelectorAll("[data-mode]").forEach(el => el.onclick = () => { timeMode = el.dataset.mode; draw(); });
+    box.innerHTML = html;
     box.querySelectorAll("[data-ev]").forEach(el => el.onclick = () => {
       selected = el.dataset.ev; openDrawer("right"); draw();
     });
@@ -615,13 +568,15 @@ function drawLeft(){
       </select></div>
     </div>
     <div class="sec"><h5>导入</h5>
+      <button class="bt wide" id="impSJ" style="margin-bottom:7px">导入 SJ Lens 备份</button>
+      <button class="bt wide" id="pasSJ" style="margin-bottom:7px">粘贴 SJ Lens 备份</button>
       <button class="bt wide" id="impJson">导入 GuangXIW JSON</button>
     </div>
     <div class="sec"><h5>导出</h5>
-<div class="hint">JSON 备份 = 全部文件夹 / 实体 / 关系 / 记录 / 待办 / 截图，手机端也是读这份。</div>
       <button class="bt wide" id="expJson" style="margin-bottom:7px">JSON 备份</button>
       <button class="bt wide" id="expMd" style="margin-bottom:7px">Markdown 报告</button>
-          </div>
+      <button class="bt wide" id="expSj" style="margin-bottom:7px">给 SJ Lens（手机）</button>
+    </div>
     <div class="sec"><h5>关于</h5>
       <div class="foot"><b>GuangXIW ${VERSION}</b><br>SJ Lens 电脑端 / 手机端互通辅助工具<br>数据保存在本机</div>
     </div>`;
@@ -646,68 +601,16 @@ function drawLeft(){
       selected = null; save(); refreshFolders(); layout("force"); draw(); center(true); toast("已删除");
     });
   };
-  const tdBtn = $("tdAdd");
-  if(tdBtn) tdBtn.onclick = () => {
-    const txt = ($("tdText").value || "").trim(); if(!txt) return;
-    n.todos = n.todos || [];
-    n.todos.push({ id:uid("td"), text:txt, how:($("tdHow").value||"").trim(), at:now(), done:false });
-    save(); drawRight(); toast("已加待办");
-  };
-  box.querySelectorAll("[data-todo]").forEach(el => {
-    el.onclick = ev => {
-      const i = +el.dataset.todo, act = el.dataset.act;
-      n.todos = n.todos || [];
-      if(!n.todos[i]) return;
-      if(act === "done"){ n.todos[i].done = !n.todos[i].done; }
-      else if(act === "del"){ n.todos.splice(i,1); }
-      ev.stopPropagation(); save(); drawRight();
-    };
-  });
-  box.querySelectorAll("[data-evi]").forEach(el => {
-    el.onclick = ev => {
-      ev.stopPropagation();
-      const i = +el.dataset.evi, act = el.dataset.act;
-      n.events = n.events || [];
-      const e = n.events[i]; if(!e) return;
-      if(act === "ok") e.st = e.st === "ok" ? "" : "ok";
-      else if(act === "no") e.st = e.st === "no" ? "" : "no";
-      else if(act === "shot"){ evShotFor = { nodeId:n.id, idx:i }; $("shotPick").value = ""; $("shotPick").click(); }
-      save(); drawRight();
-    };
+  $("impSJ").onclick = () => pick(f => importSJ(f));
+  $("pasSJ").onclick = () => dialog("area", "粘贴 SJ Lens 备份", "把导出的 JSON 全文粘进来。", "{ … }", "", v => {
+    if(!v) return; try{ importSJ(JSON.parse(v)); }catch(e){ toast("不是合法 JSON"); }
   });
   $("impJson").onclick = () => pick(f => importOwn(f));
   $("expJson").onclick = () => exportJson();
   $("expMd").onclick = () => exportMd();
-  }
-
-
-/* ── 记录/待办渲染 ── */
-const EV_ST = { ok:["已证实","#5fae7a"], no:["已推翻","#c96a5f"], "":["待验证","#8b98a6"] };
-function evRows(n){
-  const list = (n.events||[]).map((ev,i) => ({ev, i})).sort((a,b) => (b.ev.at||0)-(a.ev.at||0));
-  if(!list.length) return `<div class="empty" style="padding:2px 4px">还没有记录。</div>`;
-  return list.map(({ev,i}) => {
-    const st = EV_ST[ev.st || ""] || EV_ST[""];
-    return `<div class="kv evrow" data-evrow="${i}">
-      <span class="k">${fmtDate(ev.at)}</span>
-      <span class="v">${esc(ev.text)}${ev.shot ? ` <span class="shotmark" title="有截图">图</span>` : ""}</span>
-      <span class="evops">
-        <b class="evop${ev.st==="ok"?" on":""}" data-evi="${i}" data-act="ok" title="证实">证</b>
-        <b class="evop${ev.st==="no"?" on":""}" data-evi="${i}" data-act="no" title="推翻">翻</b>
-        <b class="evop" data-evi="${i}" data-act="shot" title="附截图">图</b>
-      </span>
-    </div>`;
-  }).join("");
+  $("expSj").onclick = () => exportSj();
 }
-function todoRows(n){
-  const list = n.todos || [];
-  if(!list.length) return `<div class="empty" style="padding:2px 4px">还没有待办。比如「确认是否同一人」/「留存主页截图」。</div>`;
-  return list.map((td,i) => `<div class="kv todorow${td.done?" done":""}">
-    <b class="todobox" data-todo="${i}" data-act="done" title="标记完成">${td.done?"✓":""}</b>
-    <span class="v"><span class="todotxt">${esc(td.text)}</span>${td.how?`<span class="todohow">手段：${esc(td.how)}</span>`:""}</span>
-    <b class="evop" data-todo="${i}" data-act="del" title="删除">×</b>
-  </div>`).join("");
-}
+
 /* ═══════════════ 右抽屉 ═══════════════ */
 function drawRight(){
   const box = $("rightBody"), d = data();
@@ -752,16 +655,12 @@ function drawRight(){
     </div>
 
     <div class="sec"><h5>记录 <span style="color:var(--fg3)">${(n.events||[]).length}</span></h5>
-      <div id="evList">${evRows(n)}</div>
+      <div id="evList">${(n.events||[]).slice().sort((a,b)=>(b.at||0)-(a.at||0)).map((ev,i) =>
+        `<div class="kv" data-evrow="${i}"><span class="k">${fmtDate(ev.at)}</span><span class="v">${esc(ev.text)}</span></div>`).join("")
+        || `<div class="empty" style="padding:2px 4px">还没有记录。</div>`}</div>
       <div class="f" style="margin-top:7px"><input type="text" id="evIn" placeholder="这条线索是什么"><button class="bt" id="evAdd">记</button></div>
       <div class="f"><label>日期</label><input type="text" id="evAt" inputmode="numeric"
         title="默认今天，可改成事情发生的日期，格式 2026-10-22"></div>
-    </div>
-
-    <div class="sec"><h5>待办 <span style="color:var(--fg3)">${(n.todos||[]).filter(x=>!x.done).length}/${(n.todos||[]).length}</span></h5>
-      <div id="todoList">${todoRows(n)}</div>
-      <div class="f" style="margin-top:7px"><input type="text" id="tdText" placeholder="要确认什么"></div>
-      <div class="f"><input type="text" id="tdHow" placeholder="打算通过什么手段收集 / 互证"><button class="bt" id="tdAdd">加</button></div>
     </div>
 
     <div class="sec"><h5>建立关系</h5>
@@ -1062,21 +961,20 @@ $("folderAdd").onclick = () => dialog("text", "新建文件夹", "一个文件�
   folders.push(f); curId = f.id; save(); refreshFolders();
   layout("force"); draw(); center(true); toast("已新建 " + name);
 });
+$("pullBtn").onclick = () => {
+  if(!window.chrome || !window.chrome.webview) return toast("请用 GuangXIW.exe 打开才能拉取");
+  toast("正在从手机拉取速记...");
+  window.chrome.webview.postMessage("pullMemos");
+};
+
+$("pushBtn").onclick = () => {
+  if(!window.chrome || !window.chrome.webview){ return toast("请用 GuangXIW.exe 打开才能推送"); }
+  exportSj(true);                 // 先导出到下载目录
+  toast("正在推送...");
+  window.chrome.webview.postMessage("push");
+};
 window.chrome && window.chrome.webview && window.chrome.webview.addEventListener("message", ev => {
   const s = String(ev.data || "");
-  if(s.startsWith("RESTORE:")){
-    const payload = s.slice(8);
-    if(!payload || payload.length < 8) return;
-    try{
-      const d = JSON.parse(payload);
-      if(!Array.isArray(d.folders) || !d.folders.length) return;
-      if(localStorage.getItem(KEY)) return;          // 已有数据时不覆盖
-      folders = d.folders; curId = d.cur || folders[0].id;
-      save(); refreshFolders(); layout("force"); draw(); center(true);
-      toast("已从本地备份恢复 " + folders.length + " 个文件夹");
-    }catch(e){}
-    return;
-  }
   if(s.startsWith("MEMOS:")){
     try{
       const arr = JSON.parse(s.slice(6));
@@ -1091,7 +989,7 @@ window.chrome && window.chrome.webview && window.chrome.webview.addEventListener
         n.events.push({ at: m.at || now(), text: m.text }); add++;
       });
       save(); draw(); openDrawer("left"); tab = "time"; draw();
-      toast(`已拉取 ${add} 条速记，可在「记录信息」里改日期`);
+      toast(`已拉取 ${add} 条速记，可在时间线里改日期`);
     }catch(e){ toast("速记文件解析失败"); }
     return;
   }
@@ -1120,8 +1018,7 @@ $("pathBtn").onclick = () => {
     });
   });
 };
-const pathClearBtn = $("pathClear");
-if(pathClearBtn) pathClearBtn.onclick = () => { pathN = new Set(); pathE = new Set(); draw(); toast("已清除"); };
+$("pathClear").onclick = () => { pathN = new Set(); pathE = new Set(); draw(); toast("已清除"); };
 $("q").addEventListener("input", () => draw());
 $("addBtn").onclick = () => dialog("text", "新增人物", "输入名字，回车加入。", "名字", "", name => {
   if(!name) return;
@@ -1155,7 +1052,6 @@ function closeDrawer(which){
   $("leftBtn").classList.toggle("on", $("left").classList.contains("open"));
   $("rightBtn").classList.toggle("on", $("right").classList.contains("open"));
 }
-openDrawer("left");
 $("leftBtn").onclick = () => $("left").classList.contains("open") ? closeDrawer("left") : openDrawer("left");
 $("rightBtn").onclick = () => $("right").classList.contains("open") ? closeDrawer("right") : openDrawer("right");
 $("leftClose").onclick = () => closeDrawer("left");
@@ -1242,10 +1138,7 @@ function exportSj(silent){
       rels.push({ to:o.name, toType:TYPE_LABEL[o.type]||o.type, type:e.type, strength:e.strength||3,
         evidence:e.evidence||"", note:e.note||"" });
     });
-    const events = (n.events||[]).map(e => ({ at:e.at||0, text:e.text||"", st:e.st||"", shot:e.shot||"" }));
-    const todos = (n.todos||[]).map(td => ({ text:td.text||"", how:td.how||"", at:td.at||0, done:!!td.done }));
-    if(rels.length || events.length || todos.length)
-      persons.push({ name:n.name, accounts:n.accounts||[], attrs:n.attrs||[], relations:rels, events, todos });
+    if(rels.length) persons.push({ name:n.name, accounts:n.accounts||[], attrs:n.attrs||[], relations:rels });
   });
   if(!persons.length) return toast("还没有可导出的关系");
   download(`guangxiw-relations-${(d.name||"folder").replace(/[\\/:*?"<>|]/g,"_")}.json`,
@@ -1254,7 +1147,6 @@ function exportSj(silent){
 }
 function importOwn(obj){
   if(!obj) return toast("空文件");
-  if(obj.kind === "guangxiw.relations" || (Array.isArray(obj.persons) && !Array.isArray(obj.nodes))) return importSJ(obj);
   if(Array.isArray(obj.folders)){
     obj.folders.forEach(f => { f.id = uid("f"); folders.push(f); });
     save(); refreshFolders(); draw(); center(true);
@@ -1271,83 +1163,30 @@ function importOwn(obj){
   }
   toast("不是 GuangXIW 导出文件");
 }
-/*<IMPORT>*/
-const TYPE_BY_LABEL = { "人物":"person", "组织":"org", "地点":"place", "账号":"account", "其他":"other" };
-/* 把 guangxiw.relations（导出/手机传回的摘要）还原成一个完整文件夹：人、账号、其他信息、关系全都在 */
-function relationsToFolder(obj){
-  const nodes = [], edges = [], byName = {};
-  function node(name, type){
-    const key = name + "\u0000" + type;
-    if(byName[key]) return byName[key];
-    const n = mkNode(name, type);
-    byName[key] = n; nodes.push(n); return n;
-  }
-  (obj.persons || []).forEach(p => {
-    if(!p || !p.name) return;
-    const n = node(p.name, TYPE_BY_LABEL[p.toType] || "person");
-    n.accounts = (p.accounts || []).map(a => ({
-      platform: a.platform || "", handle: a.handle || a.label || "", note: a.note || ""
-    }));
-    n.attrs = (p.attrs || []).map(a => ({ k: a.k || a.key || "", v: a.v || a.value || "" }));
-    n.events = (p.events || []).map(e => ({ at:e.at||0, text:e.text||"", st:e.st||"", shot:e.shot||"" }));
-    n.todos = (p.todos || []).map(td => ({ id:uid("td"), text:td.text||"", how:td.how||"", at:td.at||0, done:!!td.done }));
-    const tmpRels = (p.relations || []).slice();
-    // 先记下来，等所有人建完再连线
-    n.__rels = tmpRels;
-  });
-  nodes.forEach(n => {
-    (n.__rels || []).forEach(r => {
-      if(!r || !r.to) return;
-      const o = node(r.to, TYPE_BY_LABEL[r.toType] || "person");
-      if(o === n) return;
-      const dup = edges.find(e => (e.from===n.id&&e.to===o.id)||(e.from===o.id&&e.to===n.id));
-      if(dup){
-        if(!dup.strength && r.strength) dup.strength = r.strength;
-        if(!dup.note && r.note) dup.note = r.note;
-        if(!dup.evidence && r.evidence) dup.evidence = r.evidence;
-        return;
-      }
-      const e = mkEdge(n.id, o.id, r.type || "其他", r.strength || 3, r.note || "");
-      e.evidence = r.evidence || "";
-      edges.push(e);
-    });
-    delete n.__rels;
-  });
-  return { id: uid("f"), name: (obj.folder || "导入的关系网").trim(), nodes, edges };
-}
-/*</IMPORT>*/
 function importSJ(obj){
-  if(!obj || !Array.isArray(obj.persons)) return toast("不是关系网导出文件");
-  const f = relationsToFolder(obj);
-  if(!f.nodes.length) return toast("文件里没有人物");
-  folders.push(f); curId = f.id;
-  save(); refreshFolders(); layout("force"); draw(); center(true);
-  toast(`已导入「${f.name}」：${f.nodes.length} 个实体 · ${f.edges.length} 条关系`);
+  if(!obj || !Array.isArray(obj.persons)) return toast("不是 SJ Lens 导出文件");
+  const d = data();
+  let add = 0, upd = 0, rel = 0;
+  obj.persons.forEach(p => {
+    let n = d.nodes.find(x => x.name === p.name);
+    if(!n){ n = mkNode(p.name, "person"); n.tags = ["SJ目标"]; d.nodes.push(n); add++; }
+    else { n.tags = Array.from(new Set([...(n.tags||[]), "SJ目标"])); upd++; }
+    (p.accounts||[]).forEach(acc => {
+      const label = acc.label || acc.platform || "账号";
+      const nm = p.name + "·" + label;
+      let an = d.nodes.find(x => x.name === nm);
+      if(!an){ an = mkNode(nm, "account"); an.tags = [acc.platform||""]; d.nodes.push(an); add++; }
+      if(!d.edges.some(e => (e.from===n.id&&e.to===an.id)||(e.from===an.id&&e.to===n.id))){
+        d.edges.push(mkEdge(n.id, an.id, "同平台", 4, "SJ Lens 账号")); rel++;
+      }
+    });
+  });
+  save(); layout("force"); draw(); center(true);
+  toast(`已合并：新增 ${add} · 更新 ${upd} · 补 ${rel} 条关系`);
 }
 
 /* 头像 */
 let avatarFor = null;
-let evShotFor = null;
-$("shotPick").onchange = () => {
-  const f = $("shotPick").files[0]; if(!f || !evShotFor) return;
-  const d = data();
-  const n = d.nodes.find(x => x.id === evShotFor.nodeId);
-  if(!n || !n.events || !n.events[evShotFor.idx]) return;
-  const r = new FileReader();
-  r.onload = () => {
-    const img = new Image();
-    img.onload = () => {
-      const c = document.createElement("canvas");
-      const max = 900, sc = Math.min(1, max / Math.max(img.width, img.height));
-      c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
-      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-      n.events[evShotFor.idx].shot = c.toDataURL("image/jpeg", 0.72);
-      evShotFor = null; save(); drawRight(); toast("已附截图");
-    };
-    img.src = r.result;
-  };
-  r.readAsDataURL(f);
-};
 $("avPick").onchange = () => {
   const f = $("avPick").files[0]; if(!f || !avatarFor) return;
   const r = new FileReader();
@@ -1396,9 +1235,6 @@ function shortestPath(nodes, edges, fromId, toId){
 }
 
 /* ═══════════════ 启动 ═══════════════ */
-if(!localStorage.getItem(KEY) && window.chrome && window.chrome.webview){
-  window.chrome.webview.postMessage("NEED_BACKUP");
-}
 load();
 refreshFolders();
 layout("force");

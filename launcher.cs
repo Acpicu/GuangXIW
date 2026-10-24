@@ -167,12 +167,8 @@ static class AppHost
             Launcher.DarkTitleBar(form);
             try
             {
-                // 配置目录固定在 %LOCALAPPDATA%\GuangXIW\profile，程序释放目录被清也不会丢数据
-                string profileDir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "GuangXIW", "profile");
-                Directory.CreateDirectory(profileDir);
-                var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateAsync(null, profileDir);
+                var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateAsync(
+                    null, Path.Combine(Path.GetDirectoryName(html), "wvprofile"));
                 await web.EnsureCoreWebView2Async(env);
                 web.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
                 web.CoreWebView2.Settings.IsStatusBarEnabled = false;
@@ -182,8 +178,6 @@ static class AppHost
                     string msg = e2.TryGetWebMessageAsString();
                     if (msg == "push") web.CoreWebView2.PostWebMessageAsString(AdbPush.PushLatest());
                     if (msg == "pullMemos") web.CoreWebView2.PostWebMessageAsString(AdbPush.PullMemos());
-                    if (msg == "NEED_BACKUP") web.CoreWebView2.PostWebMessageAsString("RESTORE:" + Backup.Latest());
-                    if (msg != null && msg.StartsWith("BACKUP:")) Backup.Save(msg.Substring(7));
                 };
                 web.Source = new Uri(html);
             }
@@ -195,61 +189,5 @@ static class AppHost
         };
         form.Activated += delegate { Launcher.DarkTitleBar(form); };
         Application.Run(form);
-    }
-
-    /// <summary>数据自动备份：每次保存写一份到 我的文档\GuangXIW，保留最近 60 份。</summary>
-    static class Backup
-    {
-        static string Dir
-        {
-            get
-            {
-                string d = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "GuangXIW");
-                Directory.CreateDirectory(d);
-                return d;
-            }
-        }
-
-        public static void Save(string json)
-        {
-            try
-            {
-                if (string.IsNullOrWhiteSpace(json) || json.Length < 8) return;
-                string f = Path.Combine(Dir, "auto-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".json");
-                string tmp = f + ".tmp";
-                File.WriteAllText(tmp, json, new System.Text.UTF8Encoding(false));
-                if (File.Exists(f)) File.Delete(f);
-                File.Move(tmp, f);
-                var files = new DirectoryInfo(Dir).GetFiles("auto-*.json");
-                if (files.Length > 60)
-                {
-                    Array.Sort(files, (a, b) => a.LastWriteTimeUtc.CompareTo(b.LastWriteTimeUtc));
-                    for (int i = 0; i < files.Length - 60; i++) { try { files[i].Delete(); } catch { } }
-                }
-            }
-            catch { }
-        }
-
-        public static string Latest()
-        {
-            try
-            {
-                var files = new DirectoryInfo(Dir).GetFiles("auto-*.json");
-                if (files.Length == 0) return "";
-                Array.Sort(files, (a, b) => b.LastWriteTimeUtc.CompareTo(a.LastWriteTimeUtc));
-                foreach (var f in files)
-                {
-                    try
-                    {
-                        string s = File.ReadAllText(f.FullName, System.Text.Encoding.UTF8);
-                        if (s.Contains("\"folders\"")) return s;
-                    }
-                    catch { }
-                }
-            }
-            catch { }
-            return "";
-        }
     }
 }
