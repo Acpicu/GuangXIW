@@ -285,6 +285,10 @@ static class AppHost
                     if (msg == "pullMemos") web.CoreWebView2.PostWebMessageAsString(AdbPush.PullMemos());
                     if (msg == "NEED_BACKUP") web.CoreWebView2.PostWebMessageAsString("RESTORE:" + Backup.Latest());
                     if (msg != null && msg.StartsWith("BACKUP:")) Backup.Save(msg.Substring(7));
+                    if (msg != null && msg.StartsWith("saveShot:"))
+                        web.CoreWebView2.PostWebMessageAsString("SHOT:" + Shots.Save(msg.Substring(9)));
+                    if (msg != null && msg.StartsWith("openPath:"))
+                        Shots.Open(msg.Substring(9));
                 };
                 web.Source = new Uri(html);
             }
@@ -294,8 +298,84 @@ static class AppHost
                 form.Close();
             }
         };
+        // F11：全屏 / 还原；全屏时按 Esc 也能退出
+        bool full = false;
+        Rectangle prevBounds = form.Bounds;
+        form.KeyPreview = true;
+        form.KeyDown += delegate (object s3, KeyEventArgs e3)
+        {
+            if (e3.KeyCode == Keys.F11)
+            {
+                full = !full;
+                if (full)
+                {
+                    prevBounds = form.Bounds;
+                    form.FormBorderStyle = FormBorderStyle.None;
+                    form.WindowState = FormWindowState.Normal;
+                    form.Bounds = new Rectangle(0, 0, Screen.FromControl(form).Bounds.Width,
+                                                Screen.FromControl(form).Bounds.Height);
+                    form.TopMost = true;
+                }
+                else
+                {
+                    form.TopMost = false;
+                    form.FormBorderStyle = FormBorderStyle.Sizable;
+                    form.Bounds = prevBounds;
+                }
+                e3.Handled = true;
+            }
+            else if (e3.KeyCode == Keys.Escape && full)
+            {
+                full = false;
+                form.TopMost = false;
+                form.FormBorderStyle = FormBorderStyle.Sizable;
+                form.Bounds = prevBounds;
+                e3.Handled = true;
+            }
+        };
         form.Activated += delegate { Launcher.DarkTitleBar(form); };
         Application.Run(form);
+    }
+
+    /// <summary>记录附带的截图：存到 数据目录\shots，页面只记路径（不塞进 localStorage）。</summary>
+    static class Shots
+    {
+        public static string Dir
+        {
+            get
+            {
+                string d = Path.Combine(Launcher.Root, "shots");
+                Directory.CreateDirectory(d);
+                return d;
+            }
+        }
+
+        /// <summary>参数是 JSON：{"data":"data:image/jpeg;base64,..."}，返回保存后的绝对路径。</summary>
+        public static string Save(string payload)
+        {
+            try
+            {
+                int i = payload.IndexOf("base64,", StringComparison.Ordinal);
+                if (i < 0) return "";
+                string b64 = payload.Substring(i + 7).TrimEnd('}', '"');
+                byte[] bytes = Convert.FromBase64String(b64);
+                string f = Path.Combine(Dir, "shot-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff") + ".jpg");
+                File.WriteAllBytes(f, bytes);
+                return f;
+            }
+            catch { return ""; }
+        }
+
+        public static void Open(string path)
+        {
+            try
+            {
+                if (File.Exists(path))
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path)
+                    { UseShellExecute = true });
+            }
+            catch { }
+        }
     }
 
     /// <summary>数据自动备份：每次保存写一份到 我的文档\GuangXIW，保留最近 60 份。</summary>

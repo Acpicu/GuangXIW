@@ -279,7 +279,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
 <input type="file" id="avPick" accept="image/*" hidden>
 <script>
 /* ═══════════════ 数据层 ═══════════════ */
-const VERSION = "2.13.1";
+const VERSION = "2.14.0";
 const KEY = "guangxiw.v2";
 const TYPES = [["person","人物"],["org","组织"],["place","地点"],["account","账号"],["other","其他"]];
 const TYPE_LABEL = Object.fromEntries(TYPES);
@@ -688,7 +688,8 @@ function drawLeft(){
       </select></div>
     </div>
     <div class="sec"><h5>导入</h5>
-      <button class="bt wide" id="impJson">导入 GuangXIW JSON</button>
+      <button class="bt wide" id="impJson" style="margin-bottom:7px">导入 GuangXIW JSON</button>
+      <button class="bt wide" id="impSjBk">导入 SJ 数据本（备份 JSON）</button>
     </div>
     <div class="sec"><h5>导出</h5>
       <button class="bt wide" id="expJson" style="margin-bottom:7px">JSON 备份</button>
@@ -719,19 +720,8 @@ function drawLeft(){
       selected = null; save(); refreshFolders(); layout(layoutKind); draw(); center(true); toast("已删除");
     });
   };
-  box.querySelectorAll("[data-evi]").forEach(el => {
-    el.onclick = ev => {
-      ev.stopPropagation();
-      const i = +el.dataset.evi, act = el.dataset.act;
-      n.events = n.events || [];
-      const e = n.events[i]; if(!e) return;
-      if(act === "ok") e.st = e.st === "ok" ? "" : "ok";
-      else if(act === "no") e.st = e.st === "no" ? "" : "no";
-      else if(act === "shot"){ evShotFor = { nodeId:n.id, idx:i }; $("shotPick").value = ""; $("shotPick").click(); }
-      save(); drawRight();
-    };
-  });
   $("impJson").onclick = () => pick(f => importOwn(f));
+  $("impSjBk").onclick = () => pick(f => importSjBackup(f));
   $("expJson").onclick = () => exportJson();
   $("expMd").onclick = () => exportMd();
   $("expSj").onclick = () => exportSj();
@@ -751,7 +741,7 @@ function evRows(n){
       <span class="evops">
         <b class="evop${ev.st==="ok"?" on":""}" data-evi="${i}" data-act="ok" title="证实">证</b>
         <b class="evop${ev.st==="no"?" on":""}" data-evi="${i}" data-act="no" title="推翻">翻</b>
-        <b class="evop" data-evi="${i}" data-act="shot" title="附截图">图</b>
+        <b class="evop" data-evi="${i}" data-act="shot" title="${ev.shot ? "打开截图" : "附截图"}">${ev.shot ? "看" : "图"}</b>
       </span>
     </div>`;
   }).join("");
@@ -964,10 +954,29 @@ function drawRight(){
       },
       () => { n.attrs.splice(i,1); save(); draw(); toast("已删除"); });
   });
-  box.querySelectorAll("[data-evrow]").forEach(el => el.onclick = () => {
+  // 行内三个小按钮（证 / 翻 / 看）必须先于行点击处理，否则会被「编辑记录」吞掉
+  box.querySelectorAll("[data-evi]").forEach(el => el.onclick = ev => {
+    ev.stopPropagation();
+    const i = +el.dataset.evi, act = el.dataset.act;
+    n.events = n.events || [];
+    const e = n.events[i]; if(!e) return;
+    if(act === "ok") e.st = e.st === "ok" ? "" : "ok";
+    else if(act === "no") e.st = e.st === "no" ? "" : "no";
+    else if(act === "shot"){
+      if(e.shot){
+        if(e.shot.startsWith("data:")) window.open(e.shot, "_blank");
+        else if(window.chrome && window.chrome.webview) window.chrome.webview.postMessage("openPath:" + e.shot);
+        else toast("截图在：" + e.shot);
+      } else {
+        evShotFor = { nodeId:n.id, idx:i }; $("shotPick").value = ""; $("shotPick").click();
+      }
+    }
+    save(); drawRight();
+  });
+  box.querySelectorAll("[data-evrow]").forEach(el => el.onclick = ev => {
+    if(ev.target && ev.target.closest && ev.target.closest(".evop")) return;   // 交给上面的按钮处理
     const i = +el.dataset.evrow;
-    const sorted = (n.events||[]).slice().sort((a,b)=>(b.at||0)-(a.at||0));
-    const item = sorted[i]; if(!item) return;
+    const item = (n.events || [])[i]; if(!item) return;
     dialogForm("编辑记录", "日期可以改：补录昨天的事就写成昨天，格式 2026-10-22。",
       [{k:"at",label:"日期"},
        {k:"text",label:"内容",type:"area",ph:"这条线索是什么"}],
@@ -1203,6 +1212,11 @@ window.chrome && window.chrome.webview && window.chrome.webview.addEventListener
       save(); refreshFolders(); layout(layoutKind); draw(); center(true);
       toast("已从本地备份恢复 " + folders.length + " 个文件夹");
     }catch(e){}
+    return;
+  }
+  if(s.startsWith("SHOT:")){
+    const path = s.slice(5);
+    if(typeof window.__shotWaiter === "function"){ window.__shotWaiter(path); window.__shotWaiter = null; }
     return;
   }
   if(s.startsWith("MEMOS:")){
@@ -1455,6 +1469,103 @@ function importSJ(obj){
   toast(`已导入「${f.name}」：${f.nodes.length} 个实体 · ${f.edges.length} 条关系`);
 }
 
+/* ═══════════════ 从 SJ Lens「导出所有数据」的备份里搬数据本 ═══════════════
+   格式：{ app:"SJ Lens", version:2, persons:[{ name, accounts:[{platform,label,url}],
+           ledger:[{kind,field,value,src,grade,status,at,note,...}] }] }
+   搬法（尽量不丢信息，也不乱建东西）：
+   - 每个目标 → 一个「人物」实体（同名就复用，不重复建）
+   - ACCOUNT 记录 → 实体的账号；RELATION 记录 → 连到对方实体的连线（备注当证据正文）
+   - 有时间的记录 → 记进「记录」（时间线）；没时间的 → 进「其他信息」
+   - 来源可靠性/情报可信度（grade）→ 连线的证据等级；备注原样保留
+*/
+const SJ_KIND_LABEL = { ACCOUNT:"账号", IDENTITY:"身份", CONTACT:"联系方式", ORG:"组织",
+  LOCATION:"地点", TIMELINE:"时间", RELATION:"关系", CONTENT:"内容", BEHAVIOR:"行为", OTHER:"其他" };
+const SJ_PLATFORM = { BILI:"B站", DOUYIN:"抖音", KUAISHOU:"快手", QQZONE:"QQ空间", WEIBO:"微博", XIAOHONGSHU:"小红书" };
+
+function importSjBackup(obj){
+  if(!obj || obj.app !== "SJ Lens" || !Array.isArray(obj.persons))
+    return toast("这不是 SJ Lens 的备份文件（应为「导出所有数据」那份 JSON）");
+  const d = data();
+  const byName = {};
+  d.nodes.forEach(n => { byName[n.name.trim()] = n; });
+  function ensure(name, type){
+    const key = String(name || "").trim();
+    if(!key) return null;
+    if(byName[key]) return byName[key];
+    const n = mkNode(key, type || "person");
+    d.nodes.push(n); byName[key] = n; return n;
+  }
+  let nNode = 0, nAcc = 0, nRel = 0, nEv = 0, nAttr = 0;
+  const before = d.nodes.length;
+
+  obj.persons.forEach(p => {
+    if(!p || !p.name) return;
+    const self = ensure(p.name, "person");
+    if(!self) return;
+    (p.accounts || []).forEach(a => {
+      const plat = SJ_PLATFORM[a.platform] || a.platform || "";
+      const handle = a.label || "";
+      if(!plat && !handle) return;
+      self.accounts = self.accounts || [];
+      if(self.accounts.some(x => (x.platform||"") === plat && (x.handle||"") === handle)) return;
+      self.accounts.push({ platform: plat, handle, note: a.url || "" });
+      nAcc++;
+    });
+    (p.ledger || []).forEach(r => {
+      if(!r) return;
+      const kind = r.kind || "OTHER";
+      const field = r.field || "";
+      const value = r.value || "";
+      const src = r.src || "";
+      const grade = r.grade || "";
+      const note = r.note || "";
+      if(kind === "ACCOUNT"){
+        const plat = SJ_PLATFORM[field] || field;
+        self.accounts = self.accounts || [];
+        if(value && !self.accounts.some(x => (x.platform||"") === plat && (x.handle||"") === value)){
+          self.accounts.push({ platform: plat, handle: value, note: note || src });
+          nAcc++;
+        }
+        return;
+      }
+      if(kind === "RELATION"){
+        const other = ensure(value, "person");
+        if(!other || other === self) return;
+        const dup = d.edges.find(e => (e.from===self.id&&e.to===other.id)||(e.from===other.id&&e.to===self.id));
+        if(dup){
+          if(!dup.note && (note || src)) dup.note = note || src;
+          if(!dup.grade && grade) dup.grade = grade;
+          if(!dup.type && field) dup.type = field;
+          return;
+        }
+        const e = mkEdge(self.id, other.id, field || "其他", 3, note || src || "");
+        e.grade = grade;
+        d.edges.push(e);
+        nRel++;
+        return;
+      }
+      self.events = self.events || [];
+      self.attrs = self.attrs || [];
+      const at = Number(r.at) || 0;
+      const label = field || SJ_KIND_LABEL[kind] || kind;
+      if(at > 0){
+        const text = (value || "") + (note ? " · " + note : "") + (src ? " · 来源 " + src : "");
+        if(!self.events.some(x => (x.at||0) === at && (x.text||"") === text)){
+          self.events.push({ at, text, st:"", shot:"" });
+          nEv++;
+        }
+      } else {
+        self.attrs.push({ k: label, v: (value || "") + (note ? "（" + note + "）" : "") + (grade ? " [" + grade + "]" : "") });
+        nAttr++;
+      }
+    });
+  });
+
+  nNode = d.nodes.length - before;
+  save(); layout(layoutKind); draw(); center(true);
+  toast(`已导入 SJ 数据本：新增 ${nNode} 个实体、${nAcc} 个账号、${nRel} 条关系、${nEv} 条记录、${nAttr} 条其他信息`);
+}
+
 /* 头像 */
 let avatarFor = null;
 let evShotFor = null;
@@ -1471,8 +1582,17 @@ $("shotPick").onchange = () => {
       const max = 900, sc = Math.min(1, max / Math.max(img.width, img.height));
       c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
       c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-      n.events[evShotFor.idx].shot = c.toDataURL("image/jpeg", 0.72);
-      evShotFor = null; save(); drawRight(); toast("已附截图");
+      const dataUrl = c.toDataURL("image/jpeg", 0.72);
+      const done = (path) => {
+        // 桌面版把图片落到 数据目录\shots，记录里只存路径；浏览器里没有宿主就退回内嵌
+        n.events[evShotFor.idx].shot = path || dataUrl;
+        evShotFor = null; save(); drawRight();
+        toast(path ? "已附截图（已存到 shots 目录）" : "已附截图");
+      };
+      if(window.chrome && window.chrome.webview){
+        window.__shotWaiter = done;
+        window.chrome.webview.postMessage("saveShot:" + JSON.stringify({ data: dataUrl }));
+      } else done("");
     };
     img.src = r.result;
   };
