@@ -263,6 +263,34 @@ static class AppHost
         web.DefaultBackgroundColor = System.Drawing.Color.FromArgb(15, 17, 21);
         form.Controls.Add(web);
 
+        // F11：全屏 / 还原（焦点在网页里，键盘事件由网页发消息过来；窗口这边也能收）
+        bool full = false;
+        System.Drawing.Rectangle prevBounds = form.Bounds;
+        Action toggleFull = delegate
+        {
+            full = !full;
+            if (full)
+            {
+                prevBounds = form.Bounds;
+                form.FormBorderStyle = FormBorderStyle.None;
+                form.WindowState = FormWindowState.Normal;
+                var scr = Screen.FromControl(form).Bounds;
+                form.Bounds = new System.Drawing.Rectangle(scr.X, scr.Y, scr.Width, scr.Height);
+                form.TopMost = true;
+            }
+            else
+            {
+                form.TopMost = false;
+                form.FormBorderStyle = FormBorderStyle.Sizable;
+                form.Bounds = prevBounds;
+            }
+        };
+        form.KeyPreview = true;
+        form.KeyDown += delegate (object s3, KeyEventArgs e3)
+        {
+            if (e3.KeyCode == Keys.F11) { toggleFull(); e3.Handled = true; }
+            else if (e3.KeyCode == Keys.Escape && full) { toggleFull(); e3.Handled = true; }
+        };
         form.Load += async delegate
         {
             Launcher.DarkTitleBar(form);
@@ -283,6 +311,7 @@ static class AppHost
                     string msg = e2.TryGetWebMessageAsString();
                     if (msg == "push") web.CoreWebView2.PostWebMessageAsString(AdbPush.PushLatest());
                     if (msg == "pullMemos") web.CoreWebView2.PostWebMessageAsString(AdbPush.PullMemos());
+                    if (msg == "fullscreen") toggleFull();
                     if (msg == "NEED_BACKUP") web.CoreWebView2.PostWebMessageAsString("RESTORE:" + Backup.Latest());
                     if (msg != null && msg.StartsWith("BACKUP:")) Backup.Save(msg.Substring(7));
                     if (msg != null && msg.StartsWith("saveShot:"))
@@ -296,41 +325,6 @@ static class AppHost
             {
                 MessageBox.Show("WebView2 初始化失败：" + ex.Message, "GuangXIW");
                 form.Close();
-            }
-        };
-        // F11：全屏 / 还原；全屏时按 Esc 也能退出
-        bool full = false;
-        Rectangle prevBounds = form.Bounds;
-        form.KeyPreview = true;
-        form.KeyDown += delegate (object s3, KeyEventArgs e3)
-        {
-            if (e3.KeyCode == Keys.F11)
-            {
-                full = !full;
-                if (full)
-                {
-                    prevBounds = form.Bounds;
-                    form.FormBorderStyle = FormBorderStyle.None;
-                    form.WindowState = FormWindowState.Normal;
-                    form.Bounds = new Rectangle(0, 0, Screen.FromControl(form).Bounds.Width,
-                                                Screen.FromControl(form).Bounds.Height);
-                    form.TopMost = true;
-                }
-                else
-                {
-                    form.TopMost = false;
-                    form.FormBorderStyle = FormBorderStyle.Sizable;
-                    form.Bounds = prevBounds;
-                }
-                e3.Handled = true;
-            }
-            else if (e3.KeyCode == Keys.Escape && full)
-            {
-                full = false;
-                form.TopMost = false;
-                form.FormBorderStyle = FormBorderStyle.Sizable;
-                form.Bounds = prevBounds;
-                e3.Handled = true;
             }
         };
         form.Activated += delegate { Launcher.DarkTitleBar(form); };

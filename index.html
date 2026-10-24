@@ -241,7 +241,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
 
   <div id="stage">
     <svg id="g"><g id="vp"><g id="edges"></g><g id="nodes"></g></g></svg>
-    <div id="hint">拖动画布 · 滚轮缩放 · 双击空白新建 · Shift+拖节点连线 · Ctrl+K 详情</div>
+    <div id="hint">拖动画布 · 滚轮缩放 · 双击空白新建 · Shift+拖节点连线 · Ctrl+K 详情 · F11 全屏</div>
     <div id="capture">
       <input id="capInput" placeholder="速记：选中谁就记到谁名下（回车）">
       <div class="sep"></div>
@@ -1199,6 +1199,14 @@ $("folderAdd").onclick = () => dialog("text", "新建文件夹", "一个文件�
   folders.push(f); curId = f.id; save(); refreshFolders();
   layout(layoutKind); draw(); center(true); toast("已新建 " + name);
 });
+/* F11：WebView 吃掉键盘事件，所以由页面捕获再通知宿主窗口全屏/还原 */
+document.addEventListener("keydown", ev => {
+  if(ev.key === "F11" || ev.keyCode === 122){
+    ev.preventDefault();
+    if(window.chrome && window.chrome.webview) window.chrome.webview.postMessage("fullscreen");
+  }
+}, true);
+
 window.chrome && window.chrome.webview && window.chrome.webview.addEventListener("message", ev => {
   const s = String(ev.data || "");
   if(s.startsWith("RESTORE:")){
