@@ -686,12 +686,10 @@ function drawLeft(){
     </div>
     <div class="sec"><h5>导入</h5>
       <button class="bt wide" id="impJson" style="margin-bottom:7px">导入 GuangXIW JSON</button>
-      <button class="bt wide" id="impSjBk">导入 SJ 数据本（备份 JSON）</button>
     </div>
     <div class="sec"><h5>导出</h5>
       <button class="bt wide" id="expJson" style="margin-bottom:7px">JSON 备份</button>
       <button class="bt wide" id="expMd" style="margin-bottom:7px">Markdown 报告</button>
-      <button class="bt wide" id="expSj" style="margin-bottom:7px">给 SJ Lens（手机）</button>
     </div>
     <div class="sec"><h5>关于</h5>
       <div class="foot"><b>GuangXIW ${VERSION}</b><br>SJ Lens 电脑端 / 手机端互通辅助工具<br>数据保存在本机</div>
@@ -718,10 +716,8 @@ function drawLeft(){
     });
   };
   $("impJson").onclick = () => pick(f => importOwn(f));
-  $("impSjBk").onclick = () => pick(f => importSjBackup(f));
-  $("expJson").onclick = () => exportJson();
+$("expJson").onclick = () => exportJson();
   $("expMd").onclick = () => exportMd();
-  $("expSj").onclick = () => exportSj();
 }
 
 
