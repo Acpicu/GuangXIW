@@ -186,6 +186,9 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
     font-size:11px;line-height:12px;text-align:center;cursor:pointer;color:var(--brass)}
   .todohow{display:block;font-size:11px;color:var(--fg3);margin-top:2px}
   .hint{font-size:11px;color:var(--fg3);line-height:1.5;margin:-2px 0 8px}
+  .evtag{font-size:10px;line-height:14px;padding:0 4px;border-radius:3px;flex:none}
+  .evtag.ok{color:#0f1318;background:var(--brass)}
+  .evtag.no{color:#f0d5d1;background:#7a3b34}
 </style>
 </head>
 <body>
@@ -228,7 +231,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
     <header><span>清单</span><button class="tb icon x" id="leftClose">×</button></header>
     <div class="tabs">
       <button class="tab on" id="tabList">实体</button>
-      <button class="tab" id="tabTime">时间线</button>
+      <button class="tab" id="tabTime">记录信息</button>
       <button class="tab" id="tabFolder">文件夹</button>
     </div>
     <div class="body" id="leftBody"></div>
@@ -253,6 +256,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
 <script>
 /* ═══════════════ 数据层 ═══════════════ */
 const VERSION = "3.0.0";
+let timeMode = "all";
 const KEY = "guangxiw.v2";
 const TYPES = [["person","人物"],["org","组织"],["place","地点"],["account","账号"],["other","其他"]];
 const TYPE_LABEL = Object.fromEntries(TYPES);
@@ -557,18 +561,41 @@ function drawLeft(){
   }
 
   if(tab === "time"){
+    timeMode = timeMode || "all";
     const rows = [];
-    d.nodes.forEach(n => (n.events||[]).forEach(ev => rows.push({ at:ev.at, text:ev.text, who:n.name, id:n.id })));
-    rows.sort((a,b) => (b.at||0)-(a.at||0));
-    if(!rows.length){ box.innerHTML = `<div class="empty">还没有任何记录。选中一个人，在详情里记一笔。</div>`; return; }
+    d.nodes.forEach(n => {
+      (n.events||[]).forEach(ev => rows.push({ at:ev.at||0, text:ev.text||"", who:n.name, id:n.id, kind:"ev", st:ev.st||"" }));
+      if(timeMode !== "timed")
+        (n.attrs||[]).forEach(a => rows.push({ at:0, text:`${a.k}：${a.v}`, who:n.name, id:n.id, kind:"attr", st:"" }));
+    });
+    const list = rows.filter(r => timeMode === "all" || (timeMode === "timed" ? r.kind === "ev" : r.kind === "attr"));
+    const chip = (m, label) => `<span class="chip${(timeMode||"all")===m?" on":""}" data-mode="${m}">${label}</span>`;
+    box.innerHTML = `<div class="chips" style="margin:2px 0 6px">${chip("all","全部")}${chip("timed","带时间")}${chip("untimed","不带时间")}</div>`;
+    if(!list.length){
+      box.insertAdjacentHTML("beforeend", `<div class="empty">${timeMode === "untimed" ? "还没有其他信息/备注。选中一个人，在详情里加。" : "还没有任何记录。选中一个人，在详情里记一笔。"}</div>`);
+      box.querySelectorAll("[data-mode]").forEach(el => el.onclick = () => { timeMode = el.dataset.mode; draw(); });
+      return;
+    }
+    // 带时间的按日期分组；不带时间的单独一段放最后
+    const timed = list.filter(r => r.kind === "ev").sort((a,b) => (b.at||0)-(a.at||0));
+    const untimed = list.filter(r => r.kind === "attr");
     let html = "", day = "";
-    rows.forEach(r => {
+    timed.forEach(r => {
       const dd = r.at ? fmtDate(r.at) : "未标日期";
       if(dd !== day){ html += `<div class="evday">${dd}</div>`; day = dd; }
+      const mark = r.st === "ok" ? `<span class="evtag ok">证</span>` : r.st === "no" ? `<span class="evtag no">翻</span>` : "";
       html += `<div class="evrow" data-ev="${r.id}"><span class="t">${r.at ? fmtDate(r.at) : "--"}</span>
-        <span class="w">${esc(r.who)}</span><span>${esc(r.text)}</span></div>`;
+        <span class="w">${esc(r.who)}</span><span>${esc(r.text)}</span>${mark}</div>`;
     });
-    box.innerHTML = html;
+    if(untimed.length){
+      html += `<div class="evday">其他信息 / 备注（无时间）</div>`;
+      untimed.forEach(r => {
+        html += `<div class="evrow" data-ev="${r.id}"><span class="t">--</span>
+          <span class="w">${esc(r.who)}</span><span>${esc(r.text)}</span></div>`;
+      });
+    }
+    box.insertAdjacentHTML("beforeend", html);
+    box.querySelectorAll("[data-mode]").forEach(el => el.onclick = () => { timeMode = el.dataset.mode; draw(); });
     box.querySelectorAll("[data-ev]").forEach(el => el.onclick = () => {
       selected = el.dataset.ev; openDrawer("right"); draw();
     });
@@ -1064,7 +1091,7 @@ window.chrome && window.chrome.webview && window.chrome.webview.addEventListener
         n.events.push({ at: m.at || now(), text: m.text }); add++;
       });
       save(); draw(); openDrawer("left"); tab = "time"; draw();
-      toast(`已拉取 ${add} 条速记，可在时间线里改日期`);
+      toast(`已拉取 ${add} 条速记，可在「记录信息」里改日期`);
     }catch(e){ toast("速记文件解析失败"); }
     return;
   }
@@ -1128,6 +1155,7 @@ function closeDrawer(which){
   $("leftBtn").classList.toggle("on", $("left").classList.contains("open"));
   $("rightBtn").classList.toggle("on", $("right").classList.contains("open"));
 }
+openDrawer("left");
 $("leftBtn").onclick = () => $("left").classList.contains("open") ? closeDrawer("left") : openDrawer("left");
 $("rightBtn").onclick = () => $("right").classList.contains("open") ? closeDrawer("right") : openDrawer("right");
 $("leftClose").onclick = () => closeDrawer("left");
