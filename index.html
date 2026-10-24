@@ -279,7 +279,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
 <input type="file" id="avPick" accept="image/*" hidden>
 <script>
 /* ═══════════════ 数据层 ═══════════════ */
-const VERSION = "2.13.0";
+const VERSION = "2.13.1";
 const KEY = "guangxiw.v2";
 const TYPES = [["person","人物"],["org","组织"],["place","地点"],["account","账号"],["other","其他"]];
 const TYPE_LABEL = Object.fromEntries(TYPES);
@@ -338,11 +338,11 @@ function gradeText(g){
 function notifyBackup(){
   try{
     if(window.chrome && window.chrome.webview)
-      window.chrome.webview.postMessage("BACKUP:" + JSON.stringify({ folders, cur:curId, v:VERSION }));
+      window.chrome.webview.postMessage("BACKUP:" + JSON.stringify({ folders, cur:curId, v:VERSION, layout:layoutKind }));
   }catch(e){}
 }
 function save(){
-  try{ localStorage.setItem(KEY, JSON.stringify({ folders, cur:curId, v:VERSION })); notifyBackup(); }
+  try{ localStorage.setItem(KEY, JSON.stringify({ folders, cur:curId, v:VERSION, layout:layoutKind })); notifyBackup(); }
   catch(e){ toast("保存失败：头像过多"); }
 }
 function load(){
@@ -351,6 +351,7 @@ function load(){
     if(raw){
       const d = JSON.parse(raw);
       if(Array.isArray(d.folders) && d.folders.length){ folders = d.folders; curId = d.cur || folders[0].id; }
+      if(d.layout && ["force","circle","degree"].includes(d.layout)) layoutKind = d.layout;
     }
     if(!folders.length){
       // 从旧版本（v1）迁移，不丢用户已经录的关系
@@ -700,7 +701,7 @@ function drawLeft(){
 
   const laySel = $("laySel");
   laySel.value = layoutKind;
-  laySel.onchange = () => { layoutKind = laySel.value; layout(layoutKind); draw(); center(true); };
+  laySel.onchange = () => { layoutKind = laySel.value; layout(layoutKind); save(); draw(); center(true); };
   const nameInput = $("fName");
   if(nameInput) nameInput.addEventListener("change", () => {
     const v = (nameInput.value || "").trim();
@@ -715,7 +716,7 @@ function drawLeft(){
     dialog("text", "删除文件夹？", `「${d.name}」里的 ${d.nodes.length} 个实体会一起删除。`, "输入 yes 确认", "", v => {
       if((v||"").trim().toLowerCase() !== "yes") return toast("已取消");
       folders = folders.filter(f => f.id !== d.id); curId = folders[0].id;
-      selected = null; save(); refreshFolders(); layout("force"); draw(); center(true); toast("已删除");
+      selected = null; save(); refreshFolders(); layout(layoutKind); draw(); center(true); toast("已删除");
     });
   };
   box.querySelectorAll("[data-evi]").forEach(el => {
@@ -999,7 +1000,7 @@ function drawRight(){
       dup.grade = grade; toast("关系已更新"); }
     else { const e2 = mkEdge(n.id, other.id, type, strength, note, ev); e2.grade = grade;
       d.edges.push(e2); toast("已建立关系，" + ev); }
-    save(); layout("force"); draw(); center(true);
+    save(); layout(layoutKind); draw(); center(true);
   };
   $("rAdd").onclick = addRel;
   ["rTo"].forEach(id => $(id).addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); addRel(); } }));
@@ -1181,13 +1182,13 @@ function refreshFolders(){
 }
 $("folderSel").onchange = e => {
   curId = e.target.value; selected = null; save();
-  layout("force"); draw(); center(true);
+  layout(layoutKind); draw(); center(true);
 };
 $("folderAdd").onclick = () => dialog("text", "新建文件夹", "一个文件夹装一个调查目标。", "文件夹名", "", name => {
   if(!name) return;
   const f = { id:uid("f"), name:name.trim(), nodes:[], edges:[] };
   folders.push(f); curId = f.id; save(); refreshFolders();
-  layout("force"); draw(); center(true); toast("已新建 " + name);
+  layout(layoutKind); draw(); center(true); toast("已新建 " + name);
 });
 window.chrome && window.chrome.webview && window.chrome.webview.addEventListener("message", ev => {
   const s = String(ev.data || "");
@@ -1199,7 +1200,7 @@ window.chrome && window.chrome.webview && window.chrome.webview.addEventListener
       if(!Array.isArray(d.folders) || !d.folders.length) return;
       if(localStorage.getItem(KEY)) return;          // 已有数据时不覆盖
       folders = d.folders; curId = d.cur || folders[0].id;
-      save(); refreshFolders(); layout("force"); draw(); center(true);
+      save(); refreshFolders(); layout(layoutKind); draw(); center(true);
       toast("已从本地备份恢复 " + folders.length + " 个文件夹");
     }catch(e){}
     return;
@@ -1226,7 +1227,7 @@ window.chrome && window.chrome.webview && window.chrome.webview.addEventListener
 });
 
 $("tidyBtn").onclick = () => {
-  layout("force"); draw();
+  layout(layoutKind); draw();
   const el = vp; el.style.transition = "transform .26s ease-out";
   center(true); setTimeout(()=>{ el.style.transition = ""; }, 300);
 };
@@ -1253,7 +1254,7 @@ $("q").addEventListener("input", () => draw());
 $("addBtn").onclick = () => dialog("text", "新增人物", "输入名字，回车加入。", "名字", "", name => {
   if(!name) return;
   const d = data(), n = mkNode(name.trim()); d.nodes.push(n);
-  selected = n.id; save(); layout("force"); draw(); center(true); openDrawer("right"); toast("已添加 " + name);
+  selected = n.id; save(); layout(layoutKind); draw(); center(true); openDrawer("right"); toast("已添加 " + name);
 });
 $("capBtn").onclick = capture;
 $("capInput").addEventListener("keydown", e => { if(e.key === "Enter") capture(); });
@@ -1325,7 +1326,7 @@ function download(name, text, mime){
 }
 function exportJson(){
   download(`guangxiw-${(data().name||"folder").replace(/[\\/:*?"<>|]/g,"_")}-${new Date().toISOString().slice(0,10)}.json`,
-    JSON.stringify({ folders, cur:curId, v:VERSION }, null, 2));
+    JSON.stringify({ folders, cur:curId, v:VERSION, layout:layoutKind }, null, 2));
   toast("已导出 JSON");
 }
 function exportMd(){
@@ -1393,7 +1394,7 @@ function importOwn(obj){
     (obj.edges||[]).forEach(e => {
       if(map[e.from] && map[e.to]){ const c = Object.assign({}, e); c.id = uid("e"); c.from = map[e.from]; c.to = map[e.to]; d.edges.push(c); }
     });
-    save(); layout("force"); draw(); center(true);
+    save(); layout(layoutKind); draw(); center(true);
     return toast("已并入当前文件夹");
   }
   toast("不是 GuangXIW 导出文件");
@@ -1450,7 +1451,7 @@ function importSJ(obj){
   const f = relationsToFolder(obj);
   if(!f.nodes.length) return toast("文件里没有人物");
   folders.push(f); curId = f.id;
-  save(); refreshFolders(); layout("force"); draw(); center(true);
+  save(); refreshFolders(); layout(layoutKind); draw(); center(true);
   toast(`已导入「${f.name}」：${f.nodes.length} 个实体 · ${f.edges.length} 条关系`);
 }
 
@@ -1530,7 +1531,7 @@ if(!localStorage.getItem(KEY) && window.chrome && window.chrome.webview){
 }
 load();
 refreshFolders();
-layout("force");
+layout(layoutKind);
 draw();
 center(true);
 window.addEventListener("resize", () => { applyView(); });
