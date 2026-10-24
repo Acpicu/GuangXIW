@@ -275,8 +275,14 @@ const mkNode = (name, type = "person") => ({ id:uid("n"), name, type, tags:[], a
 const mkEdge = (from, to, type = "其他", strength = 3, note = "", evidence = "") =>
   ({ id:uid("e"), from, to, type, strength, note, evidence, at: now() });
 
+function notifyBackup(){
+  try{
+    if(window.chrome && window.chrome.webview)
+      window.chrome.webview.postMessage("BACKUP:" + JSON.stringify({ folders, cur:curId, v:VERSION }));
+  }catch(e){}
+}
 function save(){
-  try{ localStorage.setItem(KEY, JSON.stringify({ folders, cur:curId, v:VERSION })); }
+  try{ localStorage.setItem(KEY, JSON.stringify({ folders, cur:curId, v:VERSION })); notifyBackup(); }
   catch(e){ toast("保存失败：头像过多"); }
 }
 function load(){
@@ -961,20 +967,21 @@ $("folderAdd").onclick = () => dialog("text", "新建文件夹", "一个文件�
   folders.push(f); curId = f.id; save(); refreshFolders();
   layout("force"); draw(); center(true); toast("已新建 " + name);
 });
-$("pullBtn").onclick = () => {
-  if(!window.chrome || !window.chrome.webview) return toast("请用 GuangXIW.exe 打开才能拉取");
-  toast("正在从手机拉取速记...");
-  window.chrome.webview.postMessage("pullMemos");
-};
-
-$("pushBtn").onclick = () => {
-  if(!window.chrome || !window.chrome.webview){ return toast("请用 GuangXIW.exe 打开才能推送"); }
-  exportSj(true);                 // 先导出到下载目录
-  toast("正在推送...");
-  window.chrome.webview.postMessage("push");
-};
 window.chrome && window.chrome.webview && window.chrome.webview.addEventListener("message", ev => {
   const s = String(ev.data || "");
+  if(s.startsWith("RESTORE:")){
+    const payload = s.slice(8);
+    if(!payload || payload.length < 8) return;
+    try{
+      const d = JSON.parse(payload);
+      if(!Array.isArray(d.folders) || !d.folders.length) return;
+      if(localStorage.getItem(KEY)) return;          // 已有数据时不覆盖
+      folders = d.folders; curId = d.cur || folders[0].id;
+      save(); refreshFolders(); layout("force"); draw(); center(true);
+      toast("已从本地备份恢复 " + folders.length + " 个文件夹");
+    }catch(e){}
+    return;
+  }
   if(s.startsWith("MEMOS:")){
     try{
       const arr = JSON.parse(s.slice(6));
@@ -1018,7 +1025,8 @@ $("pathBtn").onclick = () => {
     });
   });
 };
-$("pathClear").onclick = () => { pathN = new Set(); pathE = new Set(); draw(); toast("已清除"); };
+const pathClearBtn = $("pathClear");
+if(pathClearBtn) pathClearBtn.onclick = () => { pathN = new Set(); pathE = new Set(); draw(); toast("已清除"); };
 $("q").addEventListener("input", () => draw());
 $("addBtn").onclick = () => dialog("text", "新增人物", "输入名字，回车加入。", "名字", "", name => {
   if(!name) return;
@@ -1235,6 +1243,9 @@ function shortestPath(nodes, edges, fromId, toId){
 }
 
 /* ═══════════════ 启动 ═══════════════ */
+if(!localStorage.getItem(KEY) && window.chrome && window.chrome.webview){
+  window.chrome.webview.postMessage("NEED_BACKUP");
+}
 load();
 refreshFolders();
 layout("force");
