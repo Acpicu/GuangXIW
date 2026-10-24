@@ -194,6 +194,24 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
   .evtag.ok{color:#67c98b;border-color:rgba(103,201,139,.4)}
   .evtag.no{color:#e0716b;border-color:rgba(224,113,107,.4)}
   .evrow.istd{opacity:.95}
+.relwrap{padding:0 0 6px}
+  .rel{margin:0}
+  .relnote{font-size:12px;line-height:1.6;color:var(--fg2);padding:3px 2px 6px;
+    white-space:normal;word-break:break-word;border-bottom:1px dashed rgba(255,255,255,.07)}
+  .f.col{display:block}
+  .f.col label{display:block;margin-bottom:4px}
+  .f textarea{width:100%;min-height:56px;resize:vertical;background:var(--bg2);
+    border:1px solid var(--line2);border-radius:6px;color:var(--fg);
+    font:13px/1.6 var(--sans);padding:6px 8px;outline:none}
+  .f textarea:focus{border-color:var(--brass2)}
+  .ovrow{padding:8px 6px;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer}
+  .ovrow:hover{background:rgba(255,255,255,.035)}
+  .ovh{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+  .ovn{font-size:13px;color:var(--fg);font-weight:600}
+  .ovm{font-size:11px;color:var(--fg3)}
+  .ovline{margin-top:4px;display:flex;flex-wrap:wrap;gap:4px 8px;font-size:12px;color:var(--fg2)}
+  .kvt{display:inline-flex;gap:4px;max-width:100%}
+  .kvt i{font-style:normal;color:var(--fg3)}
 </style>
 </head>
 <body>
@@ -238,6 +256,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
       <button class="tab on" id="tabList">实体</button>
       <button class="tab" id="tabTime">信息</button>
       <button class="tab" id="tabFolder">文件夹</button>
+      <button class="tab" id="tabOver">总览</button>
     </div>
     <div class="body" id="leftBody"></div>
   </aside>
@@ -260,7 +279,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
 <input type="file" id="avPick" accept="image/*" hidden>
 <script>
 /* ═══════════════ 数据层 ═══════════════ */
-const VERSION = "2.9.0";
+const VERSION = "2.10.0";
 const KEY = "guangxiw.v2";
 const TYPES = [["person","人物"],["org","组织"],["place","地点"],["account","账号"],["other","其他"]];
 const TYPE_LABEL = Object.fromEntries(TYPES);
@@ -538,7 +557,7 @@ function draw(){
 /* ═══════════════ 左抽屉 ═══════════════ */
 function drawLeft(){
   const d = data(), box = $("leftBody");
-  ["tabList","tabTime","tabFolder"].forEach(id => $(id).classList.toggle("on", id === "tab"+tab[0].toUpperCase()+tab.slice(1)));
+  ["tabList","tabTime","tabFolder","tabOver"].forEach(id => $(id).classList.toggle("on", id === "tab"+tab[0].toUpperCase()+tab.slice(1)));
 
   if(tab === "list"){
     const deg = {}; d.edges.forEach(e => { deg[e.from]=(deg[e.from]||0)+1; deg[e.to]=(deg[e.to]||0)+1; });
@@ -587,6 +606,33 @@ function drawLeft(){
     return;
   }
 
+  if(tab === "over"){
+    // 一屏看完：标签 / 账号 / 其他信息 / 关系数 / 记录数 / 未完成待办
+    if(!d.nodes.length){ box.innerHTML = `<div class="empty">还没有实体。</div>`; return; }
+    let html = "";
+    d.nodes.forEach(nd => {
+      const deg = d.edges.filter(e => e.from === nd.id || e.to === nd.id).length;
+      const typeLabel = (TYPES.find(x => x[0] === nd.type) || [null, nd.type || ""])[1];
+      const tags = (nd.tags || []).map(x => `<span class="evtag lab">${esc(x)}</span>`).join("");
+      const accs = (nd.accounts || []).map(a => `<span class="kvt"><i>${esc(a.platform)}</i>${esc(a.handle)}</span>`).join("");
+      const attrs = (nd.attrs || []).map(a => `<span class="kvt"><i>${esc(a.k)}</i>${esc(a.v)}</span>`).join("");
+      const openTodo = (nd.todos || []).filter(x => !x.done).length;
+      const evCount = (nd.events || []).length;
+      html += `<div class="ovrow" data-ov="${nd.id}">
+        <div class="ovh"><span class="ovn">${esc(nd.name)}</span>
+          <span class="ovm">${esc(typeLabel)} · ${deg} 关系 · ${evCount} 记录${openTodo ? ` · ${openTodo} 待办` : ""}</span></div>
+        ${tags ? `<div class="ovline">${tags}</div>` : ""}
+        ${accs ? `<div class="ovline">${accs}</div>` : ""}
+        ${attrs ? `<div class="ovline">${attrs}</div>` : ""}
+      </div>`;
+    });
+    box.innerHTML = html;
+    box.querySelectorAll("[data-ov]").forEach(el => el.onclick = () => {
+      selected = el.dataset.ov; openDrawer("right"); draw();
+    });
+    return;
+  }
+
   box.innerHTML = `
     <div class="sec"><h5>当前文件夹</h5>
       <div class="f"><input type="text" id="fName" value="${esc(d.name)}"></div>
@@ -630,16 +676,6 @@ function drawLeft(){
       folders = folders.filter(f => f.id !== d.id); curId = folders[0].id;
       selected = null; save(); refreshFolders(); layout("force"); draw(); center(true); toast("已删除");
     });
-  };
-  const tdBtn = $("tdAdd");
-  if(tdBtn) tdBtn.onclick = () => {
-    const txt = ($("tdText").value || "").trim(); if(!txt) return;
-    const labEl = $("tdLabel");
-    const lab = labEl ? (labEl.value || "").trim() : "";
-    n.todos = n.todos || [];
-    n.todos.push({ id:uid("td"), label:lab, text:txt, at:now(), done:false });
-    if(labEl) labEl.value = "";
-    save(); drawRight(); toast("已加待办");
   };
   box.querySelectorAll("[data-todo]").forEach(el => {
     el.onclick = ev => {
@@ -761,17 +797,19 @@ function drawRight(){
       <div class="f"><label>类型</label><select id="rType" style="width:100%">${RELS.map(r=>`<option>${r}</option>`).join("")}</select></div>
       <div class="chips" id="rChips">${[1,2,3,4,5].map(s=>`<span class="chip${s===3?" on":""}" data-s="${s}">强度 ${s}</span>`).join("")}</div>
       <div class="f"><label>证据</label><input type="text" id="rEv" placeholder="E-003（可空）"></div>
-      <div class="f"><label>备注</label><input type="text" id="rNote" placeholder="依据 / 怎么认识"></div>
+      <div class="f col"><label>备注</label><textarea id="rNote" rows="2" placeholder="依据 / 怎么认识（可以写长一点，会完整显示在已有关联里）"></textarea></div>
       <button class="bt solid wide" id="rAdd">建立关系</button>
     </div>
 
     <div class="sec"><h5>已有关联 <span style="color:var(--fg3)">${rels.length}</span></h5>
       ${rels.length ? rels.map(e => {
         const o = d.nodes.find(x => x.id === (e.from === n.id ? e.to : e.from));
-        return `<div class="rel" data-rel="${e.id}"><span>${esc(o ? o.name : "?")}</span>
-          <span style="color:var(--fg3)">${esc(e.type)}</span>
-          ${e.evidence ? `<span class="ev">${esc(e.evidence)}</span>` : ""}
-          <span class="s">${e.strength || 3}</span></div>`;
+        return `<div class="relwrap" data-rel="${e.id}">
+          <div class="rel"><span>${esc(o ? o.name : "?")}</span>
+            <span style="color:var(--fg3)">${esc(e.type)}</span>
+            ${e.evidence ? `<span class="ev">${esc(e.evidence)}</span>` : ""}
+            <span class="s">${e.strength || 3}</span></div>
+          ${e.note ? `<div class="relnote">${esc(e.note)}</div>` : ""}</div>`;
       }).join("") : `<div class="empty" style="padding:2px 4px">还没有关系。</div>`}
     </div>
 
@@ -827,6 +865,22 @@ function drawRight(){
   };
   $("evAdd").onclick = addEv;
   $("evIn").addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); addEv(); } });
+  // 待办：标签 + 要做的事（原先绑定错放在文件夹分支，导致按钮没反应）
+  const tdAddBtn = $("tdAdd");
+  if(tdAddBtn){
+    const addTodo = () => {
+      const txt = ($("tdText").value || "").trim(); if(!txt) return;
+      const labEl = $("tdLabel");
+      const lab = labEl ? (labEl.value || "").trim() : "";
+      n.todos = n.todos || [];
+      n.todos.push({ id:uid("td"), label:lab, text:txt, at:now(), done:false });
+      if(labEl) labEl.value = "";
+      save(); draw(); toast("已加待办");
+    };
+    tdAddBtn.onclick = addTodo;
+    const tdTextEl = $("tdText");
+    if(tdTextEl) tdTextEl.addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); addTodo(); } });
+  }
   box.querySelectorAll("[data-acc]").forEach(el => el.onclick = () => {
     const i = +el.dataset.acc, a = n.accounts[i]; if(!a) return;
     dialogForm("编辑账号", "改完点保存；不需要了可以直接删除。",
@@ -1151,6 +1205,7 @@ $("rightClose").onclick = () => closeDrawer("right");
 $("tabList").onclick = () => { tab = "list"; draw(); };
 $("tabTime").onclick = () => { tab = "time"; draw(); };
 $("tabFolder").onclick = () => { tab = "folder"; draw(); };
+$("tabOver").onclick = () => { tab = "over"; draw(); };
 document.addEventListener("keydown", e => {
   if((e.ctrlKey && e.key.toLowerCase() === "k")){ e.preventDefault(); $("rightBtn").click(); }
   if((e.ctrlKey && e.key.toLowerCase() === "l")){ e.preventDefault(); $("leftBtn").click(); }
