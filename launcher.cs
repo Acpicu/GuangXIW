@@ -226,7 +226,9 @@ static class AdbPush
     {
         try
         {
-            string tmp = Path.Combine(Path.GetTempPath(), "sj-memos.json");
+            string tmpDir = Path.Combine(Launcher.Root, "tmp");
+            Directory.CreateDirectory(tmpDir);
+            string tmp = Path.Combine(tmpDir, "sj-memos.json");
             if (File.Exists(tmp)) File.Delete(tmp);
             string r = Run("pull /sdcard/Android/data/com.sj.followclip/files/sj-memos.json \"" + tmp + "\"");
             if (r != "OK" || !File.Exists(tmp)) return "拉取失败：" + r;
