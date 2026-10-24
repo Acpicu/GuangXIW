@@ -82,8 +82,6 @@ svg#g.pan{cursor:grabbing}
 #capture input{flex:1;background:transparent;border:0;outline:none;font-size:13.5px}
 #capture input::placeholder{color:var(--fg3)}
 #capture .sep{width:1px;height:20px;background:var(--hair2)}
-#hint{position:absolute;left:16px;bottom:20px;z-index:9;font:12px/1.7 var(--sans);
-  color:#7c828b;letter-spacing:0;text-shadow:0 0 .4px rgba(255,255,255,.16)}
 
 /* ── 抽屉（左：清单 / 右：详情）── */
 .drawer{position:absolute;top:56px;bottom:0;width:300px;z-index:25;display:flex;flex-direction:column;
@@ -241,7 +239,6 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
 
   <div id="stage">
     <svg id="g"><g id="vp"><g id="edges"></g><g id="nodes"></g></g></svg>
-    <div id="hint">拖动画布 · 滚轮缩放 · 双击空白新建 · Shift+拖节点连线 · Ctrl+K 详情 · F11 全屏</div>
     <div id="capture">
       <input id="capInput" placeholder="速记：选中谁就记到谁名下（回车）">
       <div class="sep"></div>
@@ -279,7 +276,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
 <input type="file" id="avPick" accept="image/*" hidden>
 <script>
 /* ═══════════════ 数据层 ═══════════════ */
-const VERSION = "2.14.0";
+const VERSION = "2.14.2";
 const KEY = "guangxiw.v2";
 const TYPES = [["person","人物"],["org","组织"],["place","地点"],["account","账号"],["other","其他"]];
 const TYPE_LABEL = Object.fromEntries(TYPES);
