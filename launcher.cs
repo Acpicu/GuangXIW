@@ -9,13 +9,112 @@ static class Launcher
     [DllImport("dwmapi.dll")]
     static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
 
-    static string Root
+    static string _root;
+
+    internal static string Root
+    {
+        get { if (_root == null) _root = ResolveRoot(); return _root; }
+    }
+
+    static string LegacyRoot
     {
         get
         {
             return Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "GuangXIW");
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GuangXIW");
+        }
+    }
+
+    // 数据放哪儿，按这个顺序决定，用户永远能自己定，程序不擅自往 C 盘塞：
+    //   1. 环境变量 GUANGXIW_DATA
+    //   2. exe 同目录有 guangxiw.portable  → exe 旁边 GuangXIW-data（便携模式，什么都不装系统）
+    //   3. exe 同目录 guangxiw.cfg 里写 dataDir=D:\你的目录
+    //   4. exe 同目录可写 → exe 旁边 GuangXIW-data
+    //   5. 以上都不行 → 才退回 %LOCALAPPDATA%\GuangXIW
+    static string ResolveRoot()
+    {
+        try
+        {
+            string env = Environment.GetEnvironmentVariable("GUANGXIW_DATA");
+            if (!string.IsNullOrWhiteSpace(env))
+                return Path.GetFullPath(Environment.ExpandEnvironmentVariables(env.Trim()));
+        }
+        catch { }
+
+        string exeDir = null;
+        try { exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location); } catch { }
+        if (string.IsNullOrEmpty(exeDir)) exeDir = Directory.GetCurrentDirectory();
+
+        try
+        {
+            if (File.Exists(Path.Combine(exeDir, "guangxiw.portable")))
+                return Path.Combine(exeDir, "GuangXIW-data");
+        }
+        catch { }
+
+        try
+        {
+            string cfg = Path.Combine(exeDir, "guangxiw.cfg");
+            if (File.Exists(cfg))
+            {
+                foreach (string raw in File.ReadAllLines(cfg))
+                {
+                    string line = raw.Trim();
+                    if (line.Length == 0 || line.StartsWith("#") || line.StartsWith(";")) continue;
+                    int eq = line.IndexOf('=');
+                    if (eq <= 0) continue;
+                    if (line.Substring(0, eq).Trim().ToLowerInvariant() == "datadir")
+                    {
+                        string v = line.Substring(eq + 1).Trim().Trim('"');
+                        if (v.Length > 0)
+                            return Path.GetFullPath(Environment.ExpandEnvironmentVariables(v));
+                    }
+                }
+            }
+        }
+        catch { }
+
+        try
+        {
+            string probe = Path.Combine(exeDir, ".gx_write_test");
+            File.WriteAllText(probe, "1");
+            File.Delete(probe);
+            return Path.Combine(exeDir, "GuangXIW-data");
+        }
+        catch { }
+
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GuangXIW");
+    }
+
+    // 老版本把数据放在 %LOCALAPPDATA%\GuangXIW\profile，换目录时把老数据整体搬过来，只搬一次
+    internal static void MigrateLegacyData(string targetProfile)
+    {
+        try
+        {
+            string legacy = Path.Combine(LegacyRoot, "profile");
+            if (!Directory.Exists(legacy)) return;
+            if (string.Equals(Path.GetFullPath(legacy), Path.GetFullPath(targetProfile), StringComparison.OrdinalIgnoreCase)) return;
+            string marker = Path.Combine(targetProfile, ".migrated");
+            if (File.Exists(marker)) return;
+            if (Directory.Exists(targetProfile) && Directory.GetFileSystemEntries(targetProfile).Length > 0) return;
+
+            Directory.CreateDirectory(targetProfile);
+            CopyDir(legacy, targetProfile);
+            try { File.WriteAllText(marker, "migrated from " + legacy); } catch { }
+        }
+        catch { }
+    }
+
+    static void CopyDir(string from, string to)
+    {
+        Directory.CreateDirectory(to);
+        foreach (string f in Directory.GetFiles(from))
+        {
+            try { File.Copy(f, Path.Combine(to, Path.GetFileName(f)), true); } catch { }
+        }
+        foreach (string d in Directory.GetDirectories(from))
+        {
+            try { CopyDir(d, Path.Combine(to, Path.GetFileName(d))); } catch { }
         }
     }
 
@@ -167,11 +266,11 @@ static class AppHost
             Launcher.DarkTitleBar(form);
             try
             {
-                // 配置目录固定在 %LOCALAPPDATA%\GuangXIW\profile，程序释放目录被清也不会丢数据
-                string profileDir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "GuangXIW", "profile");
+                // 数据目录由 Launcher.Root 决定（exe 旁边 / guangxiw.cfg / GUANGXIW_DATA），
+                // 老版本放在 %LOCALAPPDATA%\GuangXIW\profile 的会自动搬过来，不丢数据
+                string profileDir = Path.Combine(Launcher.Root, "profile");
                 Directory.CreateDirectory(profileDir);
+                Launcher.MigrateLegacyData(profileDir);
                 var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateAsync(null, profileDir);
                 await web.EnsureCoreWebView2Async(env);
                 web.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;

@@ -9,3 +9,5 @@ _tmp/
 guangxiw-*.json
 guangxiw-*.md
 !sample-relations.json
+GuangXIW-data/
+guangxiw.portable
