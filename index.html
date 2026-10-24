@@ -1155,6 +1155,7 @@ function exportSj(silent){
 }
 function importOwn(obj){
   if(!obj) return toast("空文件");
+  if(obj.kind === "guangxiw.relations" || (Array.isArray(obj.persons) && !Array.isArray(obj.nodes))) return importSJ(obj);
   if(Array.isArray(obj.folders)){
     obj.folders.forEach(f => { f.id = uid("f"); folders.push(f); });
     save(); refreshFolders(); draw(); center(true);
@@ -1171,26 +1172,56 @@ function importOwn(obj){
   }
   toast("不是 GuangXIW 导出文件");
 }
-function importSJ(obj){
-  if(!obj || !Array.isArray(obj.persons)) return toast("不是 SJ Lens 导出文件");
-  const d = data();
-  let add = 0, upd = 0, rel = 0;
-  obj.persons.forEach(p => {
-    let n = d.nodes.find(x => x.name === p.name);
-    if(!n){ n = mkNode(p.name, "person"); n.tags = ["SJ目标"]; d.nodes.push(n); add++; }
-    else { n.tags = Array.from(new Set([...(n.tags||[]), "SJ目标"])); upd++; }
-    (p.accounts||[]).forEach(acc => {
-      const label = acc.label || acc.platform || "账号";
-      const nm = p.name + "·" + label;
-      let an = d.nodes.find(x => x.name === nm);
-      if(!an){ an = mkNode(nm, "account"); an.tags = [acc.platform||""]; d.nodes.push(an); add++; }
-      if(!d.edges.some(e => (e.from===n.id&&e.to===an.id)||(e.from===an.id&&e.to===n.id))){
-        d.edges.push(mkEdge(n.id, an.id, "同平台", 4, "SJ Lens 账号")); rel++;
-      }
-    });
+/*<IMPORT>*/
+const TYPE_BY_LABEL = { "人物":"person", "组织":"org", "地点":"place", "账号":"account", "其他":"other" };
+/* 把 guangxiw.relations（导出/手机传回的摘要）还原成一个完整文件夹：人、账号、其他信息、关系全都在 */
+function relationsToFolder(obj){
+  const nodes = [], edges = [], byName = {};
+  function node(name, type){
+    const key = name + "\u0000" + type;
+    if(byName[key]) return byName[key];
+    const n = mkNode(name, type);
+    byName[key] = n; nodes.push(n); return n;
+  }
+  (obj.persons || []).forEach(p => {
+    if(!p || !p.name) return;
+    const n = node(p.name, TYPE_BY_LABEL[p.toType] || "person");
+    n.accounts = (p.accounts || []).map(a => ({
+      platform: a.platform || "", handle: a.handle || a.label || "", note: a.note || ""
+    }));
+    n.attrs = (p.attrs || []).map(a => ({ k: a.k || a.key || "", v: a.v || a.value || "" }));
+    const tmpRels = (p.relations || []).slice();
+    // 先记下来，等所有人建完再连线
+    n.__rels = tmpRels;
   });
-  save(); layout("force"); draw(); center(true);
-  toast(`已合并：新增 ${add} · 更新 ${upd} · 补 ${rel} 条关系`);
+  nodes.forEach(n => {
+    (n.__rels || []).forEach(r => {
+      if(!r || !r.to) return;
+      const o = node(r.to, TYPE_BY_LABEL[r.toType] || "person");
+      if(o === n) return;
+      const dup = edges.find(e => (e.from===n.id&&e.to===o.id)||(e.from===o.id&&e.to===n.id));
+      if(dup){
+        if(!dup.strength && r.strength) dup.strength = r.strength;
+        if(!dup.note && r.note) dup.note = r.note;
+        if(!dup.evidence && r.evidence) dup.evidence = r.evidence;
+        return;
+      }
+      const e = mkEdge(n.id, o.id, r.type || "其他", r.strength || 3, r.note || "");
+      e.evidence = r.evidence || "";
+      edges.push(e);
+    });
+    delete n.__rels;
+  });
+  return { id: uid("f"), name: (obj.folder || "导入的关系网").trim(), nodes, edges };
+}
+/*</IMPORT>*/
+function importSJ(obj){
+  if(!obj || !Array.isArray(obj.persons)) return toast("不是关系网导出文件");
+  const f = relationsToFolder(obj);
+  if(!f.nodes.length) return toast("文件里没有人物");
+  folders.push(f); curId = f.id;
+  save(); refreshFolders(); layout("force"); draw(); center(true);
+  toast(`已导入「${f.name}」：${f.nodes.length} 个实体 · ${f.edges.length} 条关系`);
 }
 
 /* 头像 */
