@@ -185,6 +185,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
   .todobox{width:14px;height:14px;flex:none;margin-top:2px;border:1px solid var(--line2);border-radius:3px;
     font-size:11px;line-height:12px;text-align:center;cursor:pointer;color:var(--brass)}
   .todohow{display:block;font-size:11px;color:var(--fg3);margin-top:2px}
+  .hint{font-size:11px;color:var(--fg3);line-height:1.5;margin:-2px 0 8px}
 </style>
 </head>
 <body>
@@ -251,7 +252,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
 <input type="file" id="avPick" accept="image/*" hidden>
 <script>
 /* ═══════════════ 数据层 ═══════════════ */
-const VERSION = "2.7.1";
+const VERSION = "3.0.0";
 const KEY = "guangxiw.v2";
 const TYPES = [["person","人物"],["org","组织"],["place","地点"],["account","账号"],["other","其他"]];
 const TYPE_LABEL = Object.fromEntries(TYPES);
@@ -590,10 +591,10 @@ function drawLeft(){
       <button class="bt wide" id="impJson">导入 GuangXIW JSON</button>
     </div>
     <div class="sec"><h5>导出</h5>
+<div class="hint">JSON 备份 = 全部文件夹 / 实体 / 关系 / 记录 / 待办 / 截图，手机端也是读这份。</div>
       <button class="bt wide" id="expJson" style="margin-bottom:7px">JSON 备份</button>
       <button class="bt wide" id="expMd" style="margin-bottom:7px">Markdown 报告</button>
-      <button class="bt wide" id="expSj" style="margin-bottom:7px">给 SJ Lens（手机）</button>
-    </div>
+          </div>
     <div class="sec"><h5>关于</h5>
       <div class="foot"><b>GuangXIW ${VERSION}</b><br>SJ Lens 电脑端 / 手机端互通辅助工具<br>数据保存在本机</div>
     </div>`;
@@ -650,8 +651,7 @@ function drawLeft(){
   $("impJson").onclick = () => pick(f => importOwn(f));
   $("expJson").onclick = () => exportJson();
   $("expMd").onclick = () => exportMd();
-  $("expSj").onclick = () => exportSj();
-}
+  }
 
 
 /* ── 记录/待办渲染 ── */
@@ -734,7 +734,7 @@ function drawRight(){
     <div class="sec"><h5>待办 <span style="color:var(--fg3)">${(n.todos||[]).filter(x=>!x.done).length}/${(n.todos||[]).length}</span></h5>
       <div id="todoList">${todoRows(n)}</div>
       <div class="f" style="margin-top:7px"><input type="text" id="tdText" placeholder="要确认什么"></div>
-      <div class="f"><input type="text" id="tdHow" placeholder="打算通过什么手段收集 / 护证"><button class="bt" id="tdAdd">加</button></div>
+      <div class="f"><input type="text" id="tdHow" placeholder="打算通过什么手段收集 / 互证"><button class="bt" id="tdAdd">加</button></div>
     </div>
 
     <div class="sec"><h5>建立关系</h5>
