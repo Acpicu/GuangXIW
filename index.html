@@ -257,6 +257,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
       <button class="tab" id="tabTime">信息</button>
       <button class="tab" id="tabFolder">文件夹</button>
       <button class="tab" id="tabOver">总览</button>
+      <button class="tab" id="tabTodo">待办</button>
     </div>
     <div class="body" id="leftBody"></div>
   </aside>
@@ -279,7 +280,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
 <input type="file" id="avPick" accept="image/*" hidden>
 <script>
 /* ═══════════════ 数据层 ═══════════════ */
-const VERSION = "2.10.0";
+const VERSION = "2.11.0";
 const KEY = "guangxiw.v2";
 const TYPES = [["person","人物"],["org","组织"],["place","地点"],["account","账号"],["other","其他"]];
 const TYPE_LABEL = Object.fromEntries(TYPES);
@@ -557,7 +558,7 @@ function draw(){
 /* ═══════════════ 左抽屉 ═══════════════ */
 function drawLeft(){
   const d = data(), box = $("leftBody");
-  ["tabList","tabTime","tabFolder","tabOver"].forEach(id => $(id).classList.toggle("on", id === "tab"+tab[0].toUpperCase()+tab.slice(1)));
+  ["tabList","tabTime","tabFolder","tabOver","tabTodo"].forEach(id => $(id).classList.toggle("on", id === "tab"+tab[0].toUpperCase()+tab.slice(1)));
 
   if(tab === "list"){
     const deg = {}; d.edges.forEach(e => { deg[e.from]=(deg[e.from]||0)+1; deg[e.to]=(deg[e.to]||0)+1; });
@@ -602,6 +603,51 @@ function drawLeft(){
     box.innerHTML = html;
     box.querySelectorAll("[data-ev]").forEach(el => el.onclick = () => {
       selected = el.dataset.ev; openDrawer("right"); draw();
+    });
+    return;
+  }
+
+  if(tab === "todo"){
+    // 所有实体的待办汇总：未完成在前，按时间倒序
+    const items = [];
+    d.nodes.forEach(nd => (nd.todos||[]).forEach((td, idx) => items.push({ nd, td, idx })));
+    if(!items.length){ box.innerHTML = `<div class="empty">还没有待办。选中一个人，在详情里加。</div>`; return; }
+    items.sort((a,b) => (a.td.done?1:0)-(b.td.done?1:0) || (b.td.at||0)-(a.td.at||0));
+    let html = "";
+    items.forEach(it => {
+      const td = it.td;
+      html += `<div class="kv todorow${td.done?" done":""}" data-tk="${it.nd.id}" data-ti="${it.idx}">
+        <b class="todobox" data-tact="done" title="标记完成">${td.done?"✓":""}</b>
+        <span class="v">${td.label?`<span class="todolabel">${esc(td.label)}</span>`:""}<span class="todotxt">${esc(td.text)}</span>
+          <span class="todohow">${esc(it.nd.name)}${td.at?` · ${fmtDate(td.at)}`:""}</span></span>
+        <b class="evop" data-tact="edit" title="编辑">改</b>
+        <b class="evop" data-tact="del" title="删除">×</b>
+      </div>`;
+    });
+    box.innerHTML = html;
+    box.querySelectorAll("[data-tk]").forEach(row => {
+      const nid = row.dataset.tk, idx = +row.dataset.ti;
+      const nd = d.nodes.find(x => x.id === nid);
+      const td = nd && (nd.todos||[])[idx];
+      if(!td) return;
+      row.querySelectorAll("[data-tact]").forEach(b => b.onclick = ev => {
+        ev.stopPropagation();
+        const act = b.dataset.tact;
+        if(act === "done"){ td.done = !td.done; save(); draw(); }
+        else if(act === "del"){ nd.todos.splice(idx,1); save(); draw(); toast("已删除待办"); }
+        else if(act === "edit"){
+          dialogForm("编辑待办", "标签 + 要做的事情，随时可以改。",
+            [{k:"label",label:"标签",ph:"待核实 / 待截图"},{k:"text",label:"要做的事",type:"area",ph:"具体做什么"}],
+            { label: td.label || "", text: td.text || "" },
+            v => {
+              if(!(v.text||"").trim()) return toast("要做的事不能空");
+              td.label = (v.label||"").trim(); td.text = v.text.trim();
+              save(); draw(); toast("已保存");
+            },
+            () => { nd.todos.splice(idx,1); save(); draw(); toast("已删除待办"); });
+        }
+      });
+      row.onclick = () => { selected = nid; openDrawer("right"); draw(); };
     });
     return;
   }
@@ -677,16 +723,6 @@ function drawLeft(){
       selected = null; save(); refreshFolders(); layout("force"); draw(); center(true); toast("已删除");
     });
   };
-  box.querySelectorAll("[data-todo]").forEach(el => {
-    el.onclick = ev => {
-      const i = +el.dataset.todo, act = el.dataset.act;
-      n.todos = n.todos || [];
-      if(!n.todos[i]) return;
-      if(act === "done"){ n.todos[i].done = !n.todos[i].done; }
-      else if(act === "del"){ n.todos.splice(i,1); }
-      ev.stopPropagation(); save(); drawRight();
-    };
-  });
   box.querySelectorAll("[data-evi]").forEach(el => {
     el.onclick = ev => {
       ev.stopPropagation();
@@ -730,6 +766,7 @@ function todoRows(n){
   return list.map((td,i) => `<div class="kv todorow${td.done?" done":""}">
     <b class="todobox" data-todo="${i}" data-act="done" title="标记完成">${td.done?"✓":""}</b>
     <span class="v">${td.label?`<span class="todolabel">${esc(td.label)}</span>`:""}<span class="todotxt">${esc(td.text)}</span>${td.how?`<span class="todohow">手段：${esc(td.how)}</span>`:""}</span>
+    <b class="evop" data-todo="${i}" data-act="edit" title="编辑">改</b>
     <b class="evop" data-todo="${i}" data-act="del" title="删除">×</b>
   </div>`).join("");
 }
@@ -881,6 +918,29 @@ function drawRight(){
     const tdTextEl = $("tdText");
     if(tdTextEl) tdTextEl.addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); addTodo(); } });
   }
+  // 待办行：勾完成 / 删除 / 编辑（之前这段绑在文件夹分支，所以点了没反应）
+  box.querySelectorAll("[data-todo]").forEach(el => {
+    el.onclick = ev => {
+      ev.stopPropagation();
+      const i = +el.dataset.todo, act = el.dataset.act;
+      n.todos = n.todos || [];
+      if(!n.todos[i]) return;
+      if(act === "done"){ n.todos[i].done = !n.todos[i].done; save(); draw(); }
+      else if(act === "del"){ n.todos.splice(i,1); save(); draw(); toast("已删除待办"); }
+      else if(act === "edit"){
+        const td = n.todos[i];
+        dialogForm("编辑待办", "标签 + 要做的事情，随时可以改。",
+          [{k:"label",label:"标签",ph:"待核实 / 待截图"},{k:"text",label:"要做的事",type:"area",ph:"具体做什么"}],
+          { label: td.label || "", text: td.text || "" },
+          v => {
+            if(!(v.text||"").trim()) return toast("要做的事不能空");
+            td.label = (v.label||"").trim(); td.text = v.text.trim();
+            save(); draw(); toast("已保存");
+          },
+          () => { n.todos.splice(i,1); save(); draw(); toast("已删除待办"); });
+      }
+    };
+  });
   box.querySelectorAll("[data-acc]").forEach(el => el.onclick = () => {
     const i = +el.dataset.acc, a = n.accounts[i]; if(!a) return;
     dialogForm("编辑账号", "改完点保存；不需要了可以直接删除。",
@@ -1206,6 +1266,7 @@ $("tabList").onclick = () => { tab = "list"; draw(); };
 $("tabTime").onclick = () => { tab = "time"; draw(); };
 $("tabFolder").onclick = () => { tab = "folder"; draw(); };
 $("tabOver").onclick = () => { tab = "over"; draw(); };
+$("tabTodo").onclick = () => { tab = "todo"; draw(); };
 document.addEventListener("keydown", e => {
   if((e.ctrlKey && e.key.toLowerCase() === "k")){ e.preventDefault(); $("rightBtn").click(); }
   if((e.ctrlKey && e.key.toLowerCase() === "l")){ e.preventDefault(); $("leftBtn").click(); }
