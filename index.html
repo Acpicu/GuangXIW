@@ -254,7 +254,6 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
     <header><span>清单</span><button class="tb icon x" id="leftClose">×</button></header>
     <div class="tabs">
       <button class="tab on" id="tabList">实体</button>
-      <button class="tab" id="tabTime">信息</button>
       <button class="tab" id="tabFolder">文件夹</button>
       <button class="tab" id="tabOver">总览</button>
       <button class="tab" id="tabTodo">待办</button>
@@ -280,7 +279,7 @@ input:focus,textarea:focus{border-color:var(--brass);background:var(--raise2)}
 <input type="file" id="avPick" accept="image/*" hidden>
 <script>
 /* ═══════════════ 数据层 ═══════════════ */
-const VERSION = "2.11.0";
+const VERSION = "2.12.0";
 const KEY = "guangxiw.v2";
 const TYPES = [["person","人物"],["org","组织"],["place","地点"],["account","账号"],["other","其他"]];
 const TYPE_LABEL = Object.fromEntries(TYPES);
@@ -558,7 +557,7 @@ function draw(){
 /* ═══════════════ 左抽屉 ═══════════════ */
 function drawLeft(){
   const d = data(), box = $("leftBody");
-  ["tabList","tabTime","tabFolder","tabOver","tabTodo"].forEach(id => $(id).classList.toggle("on", id === "tab"+tab[0].toUpperCase()+tab.slice(1)));
+  ["tabList","tabFolder","tabOver","tabTodo"].forEach(id => $(id).classList.toggle("on", id === "tab"+tab[0].toUpperCase()+tab.slice(1)));
 
   if(tab === "list"){
     const deg = {}; d.edges.forEach(e => { deg[e.from]=(deg[e.from]||0)+1; deg[e.to]=(deg[e.to]||0)+1; });
@@ -580,29 +579,6 @@ function drawLeft(){
     box.querySelectorAll("[data-jump]").forEach(el => el.onclick = () => {
       selected = el.dataset.jump; openDrawer("right"); draw();
       const n = data().nodes.find(x => x.id === selected); if(n) focusNode(n);
-    });
-    return;
-  }
-
-  if(tab === "time"){
-    const rows = [];
-    d.nodes.forEach(n => (n.events||[]).forEach(ev => rows.push({ at:ev.at, text:ev.text, who:n.name, id:n.id, kind:"ev", st:ev.st })));
-    d.nodes.forEach(n => (n.todos||[]).forEach(td => rows.push({ at:td.at, text:td.text, who:n.name, id:n.id, kind:"td", label:td.label, done:td.done })));
-    rows.sort((a,b) => (b.at||0)-(a.at||0));
-    if(!rows.length){ box.innerHTML = `<div class="empty">还没有任何记录。选中一个人，在详情里记一笔或加个待办。</div>`; return; }
-    let html = "", day = "";
-    rows.forEach(r => {
-      const dd = r.at ? fmtDate(r.at) : "未标日期";
-      if(dd !== day){ html += `<div class="evday">${dd}</div>`; day = dd; }
-      const tag = r.kind === "td"
-        ? `<span class="evtag">待办${r.done ? "·完成" : ""}</span>${r.label ? `<span class="evtag lab">${esc(r.label)}</span>` : ""}`
-        : (r.st === "ok" ? `<span class="evtag ok">已证实</span>` : r.st === "no" ? `<span class="evtag no">已推翻</span>` : "");
-      html += `<div class="evrow${r.kind === "td" ? " istd" : ""}" data-ev="${r.id}"><span class="t">${r.at ? fmtDate(r.at) : "--"}</span>
-        <span class="w">${esc(r.who)}</span>${tag}<span>${esc(r.text)}</span></div>`;
-    });
-    box.innerHTML = html;
-    box.querySelectorAll("[data-ev]").forEach(el => el.onclick = () => {
-      selected = el.dataset.ev; openDrawer("right"); draw();
     });
     return;
   }
@@ -1193,8 +1169,8 @@ window.chrome && window.chrome.webview && window.chrome.webview.addEventListener
         if(n.events.some(e => e.text === m.text && Math.abs((e.at||0)-(m.at||0)) < 1000)) return;
         n.events.push({ at: m.at || now(), text: m.text }); add++;
       });
-      save(); draw(); openDrawer("left"); tab = "time"; draw();
-      toast(`已拉取 ${add} 条速记，可在时间线里改日期`);
+      save(); draw(); openDrawer("left"); tab = "over"; draw();
+      toast(`已拉取 ${add} 条速记，可在右侧详情里看和改`);
     }catch(e){ toast("速记文件解析失败"); }
     return;
   }
@@ -1263,7 +1239,6 @@ $("rightBtn").onclick = () => $("right").classList.contains("open") ? closeDrawe
 $("leftClose").onclick = () => closeDrawer("left");
 $("rightClose").onclick = () => closeDrawer("right");
 $("tabList").onclick = () => { tab = "list"; draw(); };
-$("tabTime").onclick = () => { tab = "time"; draw(); };
 $("tabFolder").onclick = () => { tab = "folder"; draw(); };
 $("tabOver").onclick = () => { tab = "over"; draw(); };
 $("tabTodo").onclick = () => { tab = "todo"; draw(); };
